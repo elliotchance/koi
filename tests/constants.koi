@@ -1,0 +1,15 @@
+import io
+import math
+
+const s = "constant"
+
+func (main) {
+  io(printLine: s)
+
+  const n = 500000000
+
+  const d = 3e20 / n
+  io(printLine: d)
+
+  io(printLine: math(sin: n))
+}

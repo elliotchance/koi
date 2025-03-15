@@ -1,0 +1,12 @@
+import io
+
+func (main) {
+  const a = "initial"
+  io(printLine: a)
+
+  const b = 1
+  io(printLine: b)
+
+  const d = true
+  io(printLine: d)
+}

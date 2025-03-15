@@ -1,0 +1,12 @@
+import io
+
+func (main) {
+  io(printLine: "foo" + "bar")
+
+  io(printLine: 1+1)
+  io(printLine: 7.0/3.0)
+
+  io(printLine: true and false)
+  io(printLine: true or false)
+  io(printLine: not true)
+}
