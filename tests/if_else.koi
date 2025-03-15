@@ -1,0 +1,26 @@
+import io
+
+func (main) {
+  if 7%2 == 0 {
+    io(printLine: "7 is even")
+  } else {
+    io(printLine: "7 is odd")
+  }
+
+  if 8%4 == 0 {
+    io(printLine: "8 is divisible by 4")
+  }
+
+  if (8%2 == 0) or (7%2 == 0) {
+    io(printLine: "either 8 or 7 are even")
+  }
+
+  const num = 9
+  if num < 0 {
+    io(printLine: "${num} is negative")
+  } else if num < 10 {
+    io(printLin: "${num} has 1 digit")
+  } else {
+    io(printLine: "${num} has multiple digits")
+  }
+}

@@ -1,0 +1,55 @@
+import io
+
+type geometry {
+  (area) float64
+  (perim) float64
+}
+
+type rect {
+  (width) float64
+  (height) float64
+}
+
+type circle {
+  (radius) float64
+}
+
+func rect(area) float64 {
+  return rect(width) * rect(height)
+}
+
+func rect(perim) float64 {
+  return (2*rect(width)) + (2*rect(height))
+}
+
+func circle(area) float64 {
+  return 3.14 * circle(radius) * circle(radius)
+}
+
+func circle(perim) float64 {
+  return 2 * 3.14 * circle(radius)
+}
+
+func static(measure g:geometry) {
+  io(printLine: g)
+  io(printLine: g(area))
+  io(printLine: g(perim))
+}
+
+func static(detectCircle g:geometry) {
+  if g is circle {
+    io(printLine: "circle with radius")
+    io(printLine: g(radius))
+  }
+}
+
+func static(main) {
+  const r = rect{width: 3, height: 4}
+  const c = circle{radius: 5}
+
+  static(measure:r)
+  static(measure:c)
+
+  static(detectCircle:r)
+  static(detectCircle:c)
+}

@@ -1,0 +1,25 @@
+import io
+
+func (main) {
+  mut i = 1
+  for i < 3 {
+    io(printLine: i)
+    i = i + 1
+  }
+
+  for j in 0 .. 3 {
+    io(printLine: j)
+  }
+
+  for {
+    io(printLine: "loop")
+    break
+  }
+
+  for n in 0 .. 6 {
+    if (n % 2) == 0 {
+        continue
+    }
+    io(printLine: n)
+  }
+}
