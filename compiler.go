@@ -17,7 +17,7 @@ type V struct {
 }
 
 func (v V) String() string {
-	return v.N
+	return fmt.Sprintf("%v", v.V)
 }
 
 func (v V) C(method string) any {
@@ -29,7 +29,7 @@ func _static[T any](x T) V {
 }
 
 func __static[T any](x T) M {
-	return func(...V) V { return _static[T](x) }
+	return func(...V) V { return _static(x) }
 }
 `
 
@@ -40,6 +40,10 @@ type Compiler struct {
 func (c *Compiler) CompileFile(file File) error {
 	c.file = file
 	p := "package main\n\n"
+
+	for _, code := range file.Code {
+		p += code
+	}
 
 	for _, imp := range file.Imports {
 		if imp == "io" {
@@ -54,10 +58,6 @@ func (c *Compiler) CompileFile(file File) error {
 	for _, v := range file.Vars {
 		p += c.compileStmt(v) + "\n\n"
 	}
-
-	// for _, funcStmt := range file.Funcs {
-	// 	fmt.Println(funcStmt.FuncType.Prototype(true), funcStmt.FuncType.Prototype(false))
-	// }
 
 	for _, funcStmt := range file.Funcs {
 		if funcStmt.FuncType.GoName(false) == "main" {
@@ -135,6 +135,8 @@ func (c *Compiler) compileStmt(stmt Stmt) string {
 		return c.compileExpr(s.Expr)
 	case ReturnStmt:
 		return "\treturn _static[float64](" + c.compileExpr(s.Expr) + ")\n"
+	case CodeStmt:
+		return s.Code
 	}
 
 	return fmt.Sprintf("ERROR: %T", stmt)
@@ -154,7 +156,7 @@ func (c *Compiler) compileExpr(expr Expr) string {
 				re.ReplaceAllString(string(e), "%v"),
 				strings.Join(vals, ", "))
 		}
-		return fmt.Sprintf("\"%s\"", string(e))
+		return fmt.Sprintf("V{V:\"%s\"}", string(e))
 	case BoolExpr, NumberExpr, IdentifierExpr:
 		return fmt.Sprintf("%v", e)
 	case UnaryExpr:
@@ -176,8 +178,8 @@ func (c *Compiler) compileExpr(expr Expr) string {
 		}
 		return fmt.Sprintf("V{\"%s\", nil, map[string]M{\n%s,\n\t}}\n", e.Type, strings.Join(fields, ",\n"))
 	case CallExpr:
-		funcName := fmt.Sprintf("%s.C", e.Package)
-		if e.Package == "static" {
+		funcName := fmt.Sprintf("%s.C", e.On)
+		if e.On == IdentifierExpr("static") {
 			lookingFor := fmt.Sprintf("static(%s:)", e.Args[0].Name)
 			for _, f := range c.file.Funcs {
 				if lookingFor == f.FuncType.Prototype(false) {
@@ -187,7 +189,7 @@ func (c *Compiler) compileExpr(expr Expr) string {
 
 			return "FIXME"
 		}
-		if e.Package == "io" {
+		if e.On == IdentifierExpr("io") {
 			return fmt.Sprintf("\tfmt.Println(%s)", c.compileExpr(e.Args[0].Expr))
 		}
 		return fmt.Sprintf("\t%s(\"%s\").(float64)", funcName, e.GoName())

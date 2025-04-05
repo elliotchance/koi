@@ -1,0 +1,11 @@
+{%
+import "fmt"
+%}
+
+func static(printLine line: string) {
+  {% fmt.Println(line.V) %}
+}
+
+func static(main) {
+  static(printLine:"Hello, World!")
+}

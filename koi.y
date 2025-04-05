@@ -3,14 +3,14 @@ package main
 %}
 
 %token AND BREAK CONST CONTINUE ELSE IF;
-%token IMPORT IN IS FOR FUNC MUT NOT OR RETURN TYPE;
+%token IMPORT IN IS FOR FUNC MUT NEW NOT OR RETURN TYPE;
 
-%token OPEN_PAREN CLOSE_PAREN OPEN_CURLY CLOSE_CURLY;
+%token OPEN_PAREN CLOSE_PAREN OPEN_CURLY CLOSE_CURLY OPEN_SQUARE CLOSE_SQUARE;
 %token EQUAL NOT_EQUAL LESS LESS_EQUAL GREATER GREATER_EQUAL;
 %token PLUS MINUS TIMES DIVIDE MODULO;
 %token ASSIGN COLON RANGE COMMA;
 
-%token IDENTIFIER NUMBER STRING BOOLEAN;
+%token IDENTIFIER NUMBER STRING BOOLEAN CODE;
 
 %start program;
 
@@ -25,15 +25,16 @@ program:
   | program func_stmt { file.Funcs = append(file.Funcs, $2.Func) }
   | program var_stmt { file.Vars = append(file.Vars, $2.Stmt.(VarStmt)) }
   | program type_stmt { file.Types = append(file.Types, $2.Stmt.(TypeStmt)) }
+  // | program CODE { file.Code = append(file.Code, $2.String) }
 
 type_stmt:
     TYPE IDENTIFIER OPEN_CURLY type_stmt_fields CLOSE_CURLY {
       $$.Stmt = TypeStmt{Name: $2.String, Fields: $4.FuncTypes}
     }
+  | TYPE IDENTIFIER OPEN_CURLY CLOSE_CURLY { $$.Stmt = TypeStmt{Name: $2.String} }
 
 type_stmt_fields:
-    { $$.FuncTypes = nil }
-  | func_type { $$.FuncTypes = $1.FuncTypes }
+    func_type { $$.FuncTypes = $1.FuncTypes }
   | type_stmt_fields func_type { $$.FuncTypes = append($1.FuncTypes, $2.FuncTypes...) }
 
 import_stmt:
@@ -46,7 +47,7 @@ func_stmt:
     }
 
 func_type:
-    OPEN_PAREN func_args CLOSE_PAREN types {
+    OPEN_SQUARE func_args CLOSE_SQUARE types {
       $$.FuncTypes = []FuncType{{Args: $2.FuncArgs, Return: $4.Type}}
     }
 
@@ -83,22 +84,25 @@ stmts:
   | stmts BREAK { $$.Stmts = append($$.Stmts, BreakStmt{}) }
   | stmts if_stmt { $$.Stmts = append($$.Stmts, $2.Stmt) }
   | stmts CONTINUE { $$.Stmts = append($$.Stmts, ContinueStmt{}) }
-  | stmts RETURN expr { $$.Stmts = append($$.Stmts, ReturnStmt{Expr: $3.Expr}) }
+  | stmts RETURN expr /* eos */ { $$.Stmts = append($$.Stmts, ReturnStmt{Expr: $3.Expr}) }
+  // | stmts CODE { $$.Stmts = append($$.Stmts, CodeStmt{$2.String}) }
 
 call_expr:
-    IDENTIFIER OPEN_PAREN IDENTIFIER CLOSE_PAREN {
+    OPEN_SQUARE IDENTIFIER CLOSE_SQUARE {
       $$.Expr = CallExpr{
-        Package: $1.String,
-        Args: []CallExprArg{{Name: $3.String}},
+        // Package: $1.String,
+        Args: []CallExprArg{{Name: $2.String}},
       }
     }
-  | IDENTIFIER OPEN_PAREN call_args CLOSE_PAREN {
-      $$.Expr = CallExpr{ Package: $1.String, Args: $3.CallExprArgs }
+  | OPEN_SQUARE call_args CLOSE_SQUARE {
+      $$.Expr = CallExpr{
+        // Package: $1.String,
+        Args: $2.CallExprArgs,
+      }
     }
 
 call_args:
-    IDENTIFIER { $$.CallExprArgs = []CallExprArg{{Name: $1.String}} }
-  | IDENTIFIER COLON expr {
+    IDENTIFIER COLON expr {
       $$.CallExprArgs = []CallExprArg{{Name: $1.String, Type: "int", Expr: $3.Expr}}
     }
   | call_args IDENTIFIER COLON expr {
@@ -150,22 +154,23 @@ else_if:
     }
 
 key_value_exprs:
-    { $$.r = nil }
-  | key_value_expr { $$.r = []KeyValueExpr{$1.r.(KeyValueExpr)} }
+    key_value_expr { $$.r = []KeyValueExpr{$1.r.(KeyValueExpr)} }
   | key_value_exprs COMMA key_value_expr { $$.r = lexAppend[KeyValueExpr]($1.r, $3.r) }
 
 key_value_expr:
     IDENTIFIER COLON expr { $$.r = KeyValueExpr{$1.String, $3.Expr} }
 
-expr:
-    STRING { $$.Expr = StringExpr($1.String) }
+value:
+    IDENTIFIER { $$.Expr = IdentifierExpr($1.String) }
+  | NEW IDENTIFIER OPEN_CURLY key_value_exprs CLOSE_CURLY {
+      $$.Expr = NewExpr{$2.String, $4.r.([]KeyValueExpr)}
+    }
+  | STRING { $$.Expr = StringExpr($1.String) }
   | NUMBER { $$.Expr = NumberExpr($1.String) }
-  | IDENTIFIER { $$.Expr = IdentifierExpr($1.String) }
   | BOOLEAN { $$.Expr = BoolExpr($1.Bool) }
-  | call_expr { $$.Expr = $1.Expr }
-  | NOT expr { $$.Expr = UnaryExpr{Expr: $2.Expr, Op: "!"} }
-  | OPEN_PAREN expr CLOSE_PAREN { $$.Expr = $2.Expr }
-  | expr PLUS expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: "+"} }
+
+binary_expr:
+    expr PLUS expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: "+"} }
   | expr MINUS expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: "-"} }
   | expr TIMES expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: "*"} }
   | expr DIVIDE expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: "/"} }
@@ -178,8 +183,19 @@ expr:
   | expr LESS_EQUAL expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: "<="} }
   | expr GREATER expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: ">"} }
   | expr GREATER_EQUAL expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: ">="} }
-  | IDENTIFIER OPEN_CURLY key_value_exprs CLOSE_CURLY {
-      $$.Expr = NewExpr{$1.String, $3.r.([]KeyValueExpr)}
+
+expr_base:
+    value { $$.Expr = $1.Expr }
+  | OPEN_PAREN expr CLOSE_PAREN { $$.Expr = $2.Expr }
+  | expr_base call_expr {
+      call := $2.Expr.(CallExpr)
+      call.On = $1.Expr
+      $$.Expr = call
     }
+
+expr:
+    expr_base { $$.Expr = $1.Expr }
+  | binary_expr { $$.Expr = $1.Expr }
+  | NOT expr { $$.Expr = UnaryExpr{Expr: $2.Expr, Op: "!"} }
 
 %%

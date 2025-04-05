@@ -12,6 +12,7 @@ type File struct {
 	Funcs   []Func
 	Vars    []VarStmt
 	Types   []TypeStmt
+	Code    []string
 }
 
 func (f *File) GetType(name string) TypeStmt {
@@ -32,9 +33,13 @@ type CallExprArg struct {
 	Type string
 }
 
+type CodeStmt struct {
+	Code string
+}
+
 type CallExpr struct {
-	Package string
-	Args    []CallExprArg
+	On   Expr
+	Args []CallExprArg
 }
 
 func (c CallExpr) GoName() string {
@@ -223,10 +228,6 @@ func isNumberChar(c byte) bool {
 }
 
 func (l *lexer) Lex(lval *yySymType) (result int) {
-	// defer func() {
-	// 	fmt.Printf("%d %+#v\n", result, lval)
-	// }()
-
 	for ; l.pos < len(l.s) && isWhitespace(l.s[l.pos]); l.pos++ {
 	}
 
@@ -241,11 +242,25 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 		return COLON
 	case '%':
 		return MODULO
+	case '[':
+		return OPEN_SQUARE
+	case ']':
+		return CLOSE_SQUARE
 	case '(':
 		return OPEN_PAREN
 	case ')':
 		return CLOSE_PAREN
 	case '{':
+		// if l.pos < len(l.s) && l.s[l.pos] == '%' {
+		// 	s := ""
+		// 	l.pos++
+		// 	for ; l.pos <= len(l.s)-1 && l.s[l.pos] != '%' && l.s[l.pos+1] != '}'; l.pos++ {
+		// 		s += string(l.s[l.pos])
+		// 	}
+		// 	l.pos += 2
+		// 	lval.String = s
+		// 	return CODE
+		// }
 		return OPEN_CURLY
 	case '}':
 		return CLOSE_CURLY
@@ -344,6 +359,8 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 		return IS
 	case "mut":
 		return MUT
+	case "new":
+		return NEW
 	case "not":
 		return NOT
 	case "or":
