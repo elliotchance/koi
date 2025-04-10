@@ -1,5 +1,5 @@
 import io
 
-func static[main] {
-  io[PrintLine:"Hello, World!"]
+func (main) none {
+  io(PrintLine:"Hello, World!")
 }

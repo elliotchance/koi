@@ -6,7 +6,7 @@ type MultiValues = (number, bool) | None
 
 type NamedTypes = @high (number, number) | @low (number, number) | number
 
-type Funcs = func [] void | func[fn] number | func [add:and:] void
+type Funcs = func [] none | func[fn] number | func [add:and:] none
 
 type Generic[T] = func [] T | func [do:T] none
 

@@ -3,8 +3,8 @@ package main
 %}
 
 // keywords
-%token AND BREAK CONST CONTINUE ELSE IF MATCH MAP;
-%token IMPORT IN IS FOR FUNC MUT NEW NOT OR RETURN TYPE;
+%token AND BREAK CONST CONTINUE ELSE IF FALSE MATCH MAP;
+%token IMPORT IN IS FOR FUNC MUT NEW NOT OR RETURN TYPE TRUE;
 
 // operators
 %token OPEN_PAREN CLOSE_PAREN OPEN_CURLY CLOSE_CURLY OPEN_SQUARE CLOSE_SQUARE;
@@ -13,7 +13,7 @@ package main
 %token ASSIGN COLON RANGE COMMA PIPE;
 
 // dynamic
-%token IDENTIFIER NUMBER STRING BOOLEAN TAG;
+%token IDENTIFIER NUMBER STRING TAG;
 
 %start program;
 
@@ -24,61 +24,63 @@ package main
 %%
 
 program:
-  | program import_stmt { file.Imports = append(file.Imports, $2.String) }
-  | program func_stmt { file.Funcs = append(file.Funcs, $2.Func) }
-  | program var_stmt { file.Vars = append(file.Vars, $2.Stmt.(VarStmt)) }
-  | program type_stmt { file.Types = append(file.Types, $2.Stmt.(TypeStmt)) }
+  | program import_stmt { file.Imports = append(file.Imports, $2.r.(string)) }
+  | program func_stmt { file.Funcs = append(file.Funcs, $2.r.(*FuncStmt)) }
+  | program var_stmt { file.Vars = append(file.Vars, $2.r.(VarStmt)) }
+  | program type_stmt { file.Types = append(file.Types, $2.r.(TypeStmt)) }
 
-type_stmt:
+type_stmt: // *TypeStmt
     TYPE IDENTIFIER OPEN_CURLY type_stmt_fields CLOSE_CURLY {
-      $$.Stmt = TypeStmt{Name: $2.String, Fields: $4.FuncTypes}
+      $$.r = &TypeStmt{Name: $2.r.(string), Fields: $4.r.([]*FuncType)}
     }
-  | TYPE IDENTIFIER OPEN_CURLY CLOSE_CURLY { $$.Stmt = TypeStmt{Name: $2.String} }
-  | TYPE IDENTIFIER ASSIGN sum_type
-
-type_stmt_fields:
-    OPEN_SQUARE func_args CLOSE_SQUARE type { $$.FuncTypes = $1.FuncTypes }
-  | type_stmt_fields OPEN_SQUARE func_args CLOSE_SQUARE type { $$.FuncTypes = append($1.FuncTypes, $2.FuncTypes...) }
-
-import_stmt:
-    IMPORT IDENTIFIER { $$.String = $2.String }
-
-func_stmt:
-    FUNC IDENTIFIER OPEN_SQUARE func_args CLOSE_SQUARE type OPEN_CURLY stmts CLOSE_CURLY {
-      // $3.FuncTypes[0].Type = $2.String
-      // $$.Func = &Func{FuncType: $3.FuncTypes[0], Stmts: $5.Stmts}
+  | TYPE IDENTIFIER OPEN_CURLY CLOSE_CURLY {
+      $$.r = &TypeStmt{Name: $2.r.(string)}
     }
+  | TYPE IDENTIFIER OPEN_SQUARE IDENTIFIER CLOSE_SQUARE ASSIGN type { /* TODO */ }
+  | TYPE IDENTIFIER ASSIGN type { /* TODO */ }
 
-func_args:
-    IDENTIFIER { $$.FuncArgs = []FuncArg{{Prefix: $1.String}} }
-  | func_args_2 { $$.FuncArgs = $1.FuncArgs }
+type_stmt_fields: // []*FuncType
+    func_type { $$.r = []*FuncType{$1.r.(*FuncType)} }
+  | type_stmt_fields func_type { $$.r = append($1.r.([]*FuncType), $2.r.(*FuncType)) }
 
-func_args_2:
-    IDENTIFIER COLON IDENTIFIER {
-      $$.FuncArgs = []FuncArg{{Prefix: $1.String, Name: $1.String, Type: $3.String}}
-    }
-  | IDENTIFIER IDENTIFIER COLON IDENTIFIER {
-      $$.FuncArgs = []FuncArg{{Prefix: $1.String, Name: $2.String, Type: $4.String}}
-    }
-  | func_args_2 IDENTIFIER COLON IDENTIFIER {
-      $$.FuncArgs = append($1.FuncArgs,
-        FuncArg{Prefix: $2.String, Name: $2.String, Type: $4.String})
-    }
-  | func_args_2 IDENTIFIER IDENTIFIER COLON IDENTIFIER {
-      $$.FuncArgs = append($1.FuncArgs,
-        FuncArg{Prefix: $2.String, Name: $3.String, Type: $5.String})
+import_stmt: // string
+    IMPORT IDENTIFIER { $$.r = $2.r.(string) }
+
+func_stmt: // *FuncStmt
+    func_type block {
+      $$.r = &FuncStmt{ FuncType: $1.r.(*FuncType), Stmts: $2.r.([]Stmt) }
     }
 
-stmts:
-    { $$.Stmts = nil }
-  | stmts expr_base { $$.Stmts = append($$.Stmts, ExprStmt{$2.Expr}) }
-  | stmts var_stmt { $$.Stmts = append($$.Stmts, $2.Stmt) }
-  | stmts for_stmt { $$.Stmts = append($$.Stmts, $2.Stmt) }
-  | stmts assign_stmt { $$.Stmts = append($$.Stmts, $2.Stmt) }
-  | stmts BREAK { $$.Stmts = append($$.Stmts, BreakStmt{}) }
-  | stmts if_stmt { $$.Stmts = append($$.Stmts, $2.Stmt) }
-  | stmts CONTINUE { $$.Stmts = append($$.Stmts, ContinueStmt{}) }
-  | stmts RETURN expr { $$.Stmts = append($$.Stmts, ReturnStmt{Expr: $3.Expr}) }
+func_args: // []*FuncArg
+    IDENTIFIER { $$.r = []*FuncArg{{Prefix: $1.r.(string)}} }
+  | func_args_multi { $$.r = $1.r }
+
+func_args_multi: // []*FuncArg
+    func_args_term { $$.r = []*FuncArg{$1.r.(*FuncArg)} }
+  | func_args_multi func_args_term {
+      $$.r = append($1.r.([]*FuncArg), $2.r.(*FuncArg))
+    }
+
+func_args_term: // *FuncArg
+    IDENTIFIER COLON type {
+      $$.r = &FuncArg{Prefix: $1.r.(string), Name: $1.r.(string), Type: $3.r.(Type)}
+    }
+  | IDENTIFIER IDENTIFIER COLON type {
+      $$.r = &FuncArg{Prefix: $1.r.(string), Name: $2.r.(string), Type: $4.r.(Type)}
+    }
+
+stmts: // []Stmt
+    { $$.r = []Stmt(nil) }
+  | stmts single_expr { $$.r = append($$.r.([]Stmt), ExprStmt{$2.r}) }
+  | stmts var_stmt { $$.r = append($$.r.([]Stmt), $2.r) }
+  | stmts for_stmt { $$.r = append($$.r.([]Stmt), $2.r) }
+  | stmts for_range_stmt { $$.r = append($$.r.([]Stmt), $2.r) }
+  | stmts assign_stmt { $$.r = append($$.r.([]Stmt), $2.r) }
+  | stmts BREAK { $$.r = append($$.r.([]Stmt), BreakStmt{}) }
+  | stmts if_stmt { $$.r = append($$.r.([]Stmt), $2.r) }
+  | stmts CONTINUE { $$.r = append($$.r.([]Stmt), ContinueStmt{}) }
+  | stmts RETURN expr { $$.r = append($$.r.([]Stmt), ReturnStmt{Expr: $3.r}) }
+  // TODO add match
 
 match_expr:
     MATCH expr OPEN_CURLY match_cases CLOSE_CURLY
@@ -92,165 +94,182 @@ match_case:
   | TAG IDENTIFIER block
 
 block:
-    OPEN_CURLY stmts CLOSE_CURLY
+    OPEN_CURLY stmts CLOSE_CURLY { $$.r = $2.r.([]Stmt) }
 
-call_expr:
-    OPEN_SQUARE IDENTIFIER CLOSE_SQUARE {
-      $$.Expr = &CallExpr{
-        Args: []*CallExprArg{{Name: $2.String}},
-      }
+call_expr: // *CallExpr
+    OPEN_PAREN IDENTIFIER CLOSE_PAREN {
+      $$.r = &CallExpr{Args: []*CallExprArg{{Name: $2.r.(string)}}}
     }
-  | OPEN_SQUARE call_args CLOSE_SQUARE {
-      $$.Expr = &CallExpr{
-        Args: $2.CallExprArgs,
-      }
+  | OPEN_PAREN call_args CLOSE_PAREN {
+      $$.r = &CallExpr{Args: $2.r.([]*CallExprArg)}
     }
 
-call_args:
+call_args: // []*CallExprArg
     IDENTIFIER COLON expr {
-      $$.CallExprArgs = []*CallExprArg{{Name: $1.String, Expr: $3.Expr}}
+      $$.r = []*CallExprArg{{Name: $1.r.(string), Expr: $3.r}}
     }
   | call_args IDENTIFIER COLON expr {
-      $$.CallExprArgs = append($1.CallExprArgs, &CallExprArg{Name: $2.String, Expr: $4.Expr})
+      $$.r = append($1.r.([]*CallExprArg),
+        &CallExprArg{Name: $2.r.(string), Expr: $4.r})
     }
 
-var_stmt:
-    CONST assign_stmt { $$.Stmt = VarStmt{Mut: false, AssignStmt: $2.Stmt.(AssignStmt)} }
-  | MUT assign_stmt { $$.Stmt = VarStmt{Mut: true, AssignStmt: $2.Stmt.(AssignStmt)} }
+var_stmt: // *VarStmt
+    CONST assign_stmt { $$.r = &VarStmt{Mut: false, AssignStmt: $2.r.(*AssignStmt)} }
+  | MUT assign_stmt { $$.r = &VarStmt{Mut: true, AssignStmt: $2.r.(*AssignStmt)} }
 
-assign_stmt:
-    IDENTIFIER ASSIGN expr { $$.Stmt = AssignStmt{Name: $1.String, Expr: $3.Expr} }
-
-for_stmt:
-    FOR expr OPEN_CURLY stmts CLOSE_CURLY {
-      $$.Stmt = ForStmt{Expr: $2.Expr, Stmts: $4.Stmts}
-    }
-  | FOR IDENTIFIER IN expr RANGE expr OPEN_CURLY stmts CLOSE_CURLY {
-      $$.Stmt = ForRangeStmt{Name: $2.String, From: $4.Expr, To: $6.Expr, Stmts: $8.Stmts}
-    }
-  | FOR OPEN_CURLY stmts CLOSE_CURLY {
-      $$.Stmt = ForStmt{Stmts: $3.Stmts}
+assign_stmt: // *AssignStmt
+    IDENTIFIER ASSIGN expr {
+      $$.r = AssignStmt{Name: $1.r.(string), Expr: $3.r}
     }
 
-if_stmt:
-    IF expr OPEN_CURLY stmts CLOSE_CURLY {
-      $$.Stmt = IfStmt{Expr: $2.Expr, Stmts: $4.Stmts}
-    }
-  | IF IDENTIFIER IS IDENTIFIER OPEN_CURLY stmts CLOSE_CURLY {
-      $$.Stmt = IfStmt{
-        Expr: IsExpr{$2.String, $4.String},
-        Stmts: $6.Stmts,
+for_stmt: // *ForStmt
+    FOR expr block { $$.r = &ForStmt{Expr: $2.r, Stmts: $3.r.([]Stmt)} }
+
+for_range_stmt: // *ForRangeStmt
+    FOR IDENTIFIER IN expr RANGE expr block {
+      $$.r = &ForRangeStmt{
+        Name: $2.r.(string),
+        From: $4.r,
+        To: $6.r,
+        Stmts: $7.r.([]Stmt),
       }
     }
-  | IF expr OPEN_CURLY stmts CLOSE_CURLY ELSE OPEN_CURLY stmts CLOSE_CURLY {
-      $$.Stmt = IfStmt{Expr: $2.Expr, Stmts: $4.Stmts, Elses: $8.Elses}
-    }
-  | IF expr OPEN_CURLY stmts CLOSE_CURLY else_ifs ELSE OPEN_CURLY stmts CLOSE_CURLY {
-      $$.Stmt = IfStmt{Expr: $2.Expr, Stmts: $4.Stmts, Elses: $8.Elses}
-    }
 
-else_ifs:
-    else_if { $$.Elses = $1.Elses }
-  | else_ifs else_if { $$.Elses = append($1.Elses, $2.Elses...) }
-
-else_if:
-    ELSE IF expr OPEN_CURLY stmts CLOSE_CURLY {
-      $$.Elses = append($$.Elses, Else{Expr: $3.Expr, Stmts: $5.Stmts})
+if_stmt: // *IfStmt
+    IF expr block { $$.r = &IfStmt{Expr: $2.r, Stmts: $3.r.([]Stmt)} }
+  | IF IDENTIFIER IS IDENTIFIER block {
+      $$.r = &IfStmt{
+        Expr: IsExpr{$2.r.(string), $4.r.(string)},
+        Stmts: $5.r.([]Stmt),
+      }
+    }
+  | IF expr block ELSE block {
+      $$.r = &IfStmt{Expr: $2.r, Stmts: $3.r.([]Stmt), Else: $5.r.([]Stmt) }
     }
 
-key_value_exprs:
-    key_value_expr { $$.r = []KeyValueExpr{$1.r.(KeyValueExpr)} }
-  | key_value_exprs COMMA key_value_expr { $$.r = lexAppend[KeyValueExpr]($1.r, $3.r) }
-
-key_value_expr:
-    IDENTIFIER COLON expr { $$.r = KeyValueExpr{$1.String, $3.Expr} }
-
-value:
-    IDENTIFIER { $$.Expr = IdentifierExpr($1.String) }
-  | NEW IDENTIFIER OPEN_CURLY key_value_exprs CLOSE_CURLY {
-      $$.Expr = NewExpr{$2.String, $4.r.([]KeyValueExpr)}
+key_value_exprs: // []*KeyValueExpr
+    key_value_expr { $$.r = []*KeyValueExpr{$1.r.(*KeyValueExpr)} }
+  | key_value_exprs COMMA key_value_expr {
+      $$.r = append($1.r.([]*KeyValueExpr), $3.r.(*KeyValueExpr))
     }
-  | STRING { $$.Expr = StringExpr($1.String) }
-  | NUMBER { $$.Expr = NumberExpr($1.String) }
-  | BOOLEAN { $$.Expr = BoolExpr($1.Bool) }
+
+key_value_expr: // *KeyValueExpr
+    IDENTIFIER COLON expr { $$.r = &KeyValueExpr{$1.r.(string), $3.r} }
+
+// Expressions
+
+expr: // any
+    single_expr { $$.r = $1.r }
+  | binary_expr { $$.r = $1.r }
+  | NOT expr { $$.r = UnaryExpr{Expr: $2.r, Op: "!"} }
+  | MINUS expr { $$.r = UnaryExpr{Expr: $2.r, Op: "-"} }
+
+single_expr:
+    value { $$.r = $1.r }
+  // | OPEN_PAREN expr CLOSE_PAREN { $$.r = $2.Expr }
+  | single_expr call_expr {
+      call := $2.r.(*CallExpr)
+      call.On = $1.r
+      $$.r = call
+    }
+  | match_expr { /* TODO */ }
 
 binary_expr:
-    expr PLUS expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: "+"} }
-  | expr MINUS expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: "-"} }
-  | expr TIMES expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: "*"} }
-  | expr DIVIDE expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: "/"} }
-  | expr MODULO expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: "%"} }
-  | expr AND expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: "&&"} }
-  | expr OR expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: "||"} }
-  | expr EQUAL expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: "=="} }
-  | expr NOT_EQUAL expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: "!="} }
-  | expr LESS expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: "<"} }
-  | expr LESS_EQUAL expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: "<="} }
-  | expr GREATER expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: ">"} }
-  | expr GREATER_EQUAL expr { $$.Expr = BinaryExpr{Left: $1.Expr, Right: $3.Expr, Op: ">="} }
-
-expr_base:
-    value { $$.Expr = $1.Expr }
-  | OPEN_PAREN expr CLOSE_PAREN { $$.Expr = $2.Expr }
-  | expr_base call_expr {
-      call := $2.Expr.(*CallExpr)
-      call.On = $1.Expr
-      $$.Expr = call
-    }
-  | match_expr
-
-expr:
-    expr_base { $$.Expr = $1.Expr }
-  | binary_expr { $$.Expr = $1.Expr }
-  | NOT expr { $$.Expr = UnaryExpr{Expr: $2.Expr, Op: "!"} }
-  | MINUS expr { $$.Expr = UnaryExpr{Expr: $2.Expr, Op: "+"} }
-  | array
-  | map
-
-map:
-    map_type OPEN_CURLY key_value_exprs CLOSE_CURLY
-  | map_type OPEN_CURLY CLOSE_CURLY
-
-array:
-    array_type OPEN_CURLY expr_list CLOSE_CURLY
-  | array_type OPEN_CURLY CLOSE_CURLY
+    expr PLUS expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "+"} }
+  | expr MINUS expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "-"} }
+  | expr TIMES expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "*"} }
+  | expr DIVIDE expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "/"} }
+  | expr MODULO expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "%"} }
+  | expr AND expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "&&"} }
+  | expr OR expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "||"} }
+  | expr EQUAL expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "=="} }
+  | expr NOT_EQUAL expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "!="} }
+  | expr LESS expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "<"} }
+  | expr LESS_EQUAL expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "<="} }
+  | expr GREATER expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: ">"} }
+  | expr GREATER_EQUAL expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: ">="} }
 
 expr_list:
     expr
   | expr_list COMMA expr
 
+// Values
+
+value:
+    IDENTIFIER { $$.r = IdentifierExpr($1.r.(string)) }
+  | STRING { $$.r = StringExpr($1.r.(string)) }
+  | NUMBER { $$.r = NumberExpr($1.r.(string)) }
+  | boolean_value
+  | array_value
+  | map_value
+  | object_value
+
+boolean_value:
+    TRUE { $$.r = BoolExpr(true) }
+  | FALSE { $$.r = BoolExpr(false) }
+
+// new Person{name: "Bob"}
+// new thing{}
+object_value:
+    NEW IDENTIFIER OPEN_CURLY key_value_exprs CLOSE_CURLY {
+      $$.r = NewExpr{$2.r.(string), $4.r.([]KeyValueExpr)}
+    }
+  | NEW IDENTIFIER OPEN_CURLY CLOSE_CURLY
+
+// [1, 2, 3]
+// [1, 2,]
+// new []int
+array_value:
+    OPEN_SQUARE expr_list optional_comma CLOSE_SQUARE
+  | NEW array_type
+
+// {a: "foo", b: "bar"}
+// {1: 5, 7: 8,}
+// new map[string]string
+map_value:
+    OPEN_CURLY key_value_exprs optional_comma CLOSE_CURLY
+  | NEW map_type
+
+optional_comma:
+  | COMMA
+
 // Types
 
-array_type:
-    OPEN_SQUARE CLOSE_SQUARE IDENTIFIER
+type: // Type
+    single_type { $$.r = Type{$1.r.(*SingleType)} }
+  | OPEN_PAREN sum_type CLOSE_PAREN { $$.r = $2.r.([]*SingleType) }
 
-map_type:
-    MAP OPEN_SQUARE IDENTIFIER CLOSE_SQUARE IDENTIFIER
-
-single_type:
-    IDENTIFIER
-  | array_type
-  | map_type
-
-multi_type:
-    single_type
-  | OPEN_PAREN type_list CLOSE_PAREN
-
-sum_type:
-    multi_type
-  | sum_type PIPE multi_type
-
-type:
-    sum_type
-  | func_type
-
-func_type:
-    FUNC OPEN_SQUARE func_args CLOSE_SQUARE type {
-      $$.FuncTypes = []FuncType{{Args: $2.FuncArgs, Return: $4.Type}}
+array_type: // *ArrayType
+    OPEN_SQUARE CLOSE_SQUARE single_type {
+      $$.r = &ArrayType{Element: $3.r.(*SingleType)}
     }
 
-type_list:
-    type
-  | type_list COMMA type
+map_type: // *MapType
+    MAP OPEN_SQUARE IDENTIFIER CLOSE_SQUARE single_type {
+      $$.r = &MapType{
+        Key: &SingleType{Type: $3.r.(string)},
+        Value: $5.r.(*SingleType),
+      }
+    }
+
+single_type: // *SingleType
+    IDENTIFIER { $$.r = &SingleType{Type: $1.r.(string)} }
+  | array_type { $$.r = &SingleType{Array: $1.r.(*ArrayType)} }
+  | map_type { $$.r = &SingleType{Map: $1.r.(*MapType)} }
+  | func_type { $$.r = &SingleType{Func: $1.r.(*FuncType)} }
+
+sum_type: // []*SingleType
+    single_type { $$.r = []*SingleType{$1.r.(*SingleType)} }
+  | sum_type PIPE single_type {
+      $$.r = append($1.r.([]*SingleType), $3.r.(*SingleType))
+    }
+
+func_type: // *FuncType
+    FUNC OPEN_PAREN func_args CLOSE_PAREN type {
+      $$.r = &FuncType{Args: $3.r.([]*FuncArg), Return: $5.r.(Type)}
+    }
+  | FUNC IDENTIFIER OPEN_PAREN func_args CLOSE_PAREN type {
+      $$.r = &FuncType{Type: $2.r.(string), Args: $2.r.([]*FuncArg), Return: $4.r.(Type)}
+    }
 
 %%

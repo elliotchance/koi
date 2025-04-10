@@ -9,7 +9,7 @@ var yySym yySymType
 
 type File struct {
 	Imports []string
-	Funcs   []*Func
+	Funcs   []*FuncStmt
 	Vars    []VarStmt
 	Types   []TypeStmt
 }
@@ -24,7 +24,7 @@ func (f *File) GetType(name string) TypeStmt {
 	return TypeStmt{}
 }
 
-func (f *File) GetFunc(name string) *Func {
+func (f *File) GetFunc(name string) *FuncStmt {
 	for _, f := range f.Funcs {
 		parts := strings.Split(f.FuncType.String(), "]")
 		if parts[0]+"]" == name {
@@ -33,8 +33,6 @@ func (f *File) GetFunc(name string) *Func {
 	}
 
 	panic(name)
-
-	return nil
 }
 
 var file File
@@ -42,7 +40,7 @@ var file File
 type CallExprArg struct {
 	Name string
 	Expr Expr
-	Type string
+	Type Type
 }
 
 type CallExpr struct {
@@ -53,7 +51,7 @@ type CallExpr struct {
 func (c *CallExpr) GoName(any bool) string {
 	var a []string
 	for _, arg := range c.Args {
-		if arg.Type == "" {
+		if len(arg.Type) == 0 {
 			a = append(a, arg.Name)
 		} else {
 			if any {
@@ -79,7 +77,7 @@ type AssignStmt struct {
 
 type VarStmt struct {
 	Mut        bool
-	AssignStmt AssignStmt
+	AssignStmt *AssignStmt
 }
 
 type Expr any
@@ -97,15 +95,10 @@ type ForStmt struct {
 	Stmts []Stmt
 }
 
-type Else struct {
-	Expr  Expr
-	Stmts []Stmt
-}
-
 type IfStmt struct {
 	Expr  Expr
 	Stmts []Stmt
-	Elses []Else
+	Else  []Stmt
 }
 
 type ReturnStmt struct {
@@ -136,7 +129,7 @@ type IsExpr struct {
 
 type TypeStmt struct {
 	Name   string
-	Fields []FuncType
+	Fields []*FuncType
 }
 
 type UnaryExpr struct {
@@ -152,21 +145,36 @@ type NewExpr struct {
 type FuncArg struct {
 	Prefix string
 	Name   string
-	Type   string
+	Type   Type
 }
 
-type Type []string
+type Type []*SingleType
+
+type SingleType struct {
+	Type  string
+	Array *ArrayType
+	Map   *MapType
+	Func  *FuncType
+}
+
+type ArrayType struct {
+	Element *SingleType
+}
+
+type MapType struct {
+	Key, Value *SingleType
+}
 
 type FuncType struct {
 	Type   string
-	Args   []FuncArg
+	Args   []*FuncArg
 	Return Type
 }
 
 func (f FuncType) String() string {
 	var a []string
 	for _, arg := range f.Args {
-		if arg.Type == "" {
+		if len(arg.Type) == 0 {
 			a = append(a, arg.Prefix)
 		} else {
 			a = append(a, fmt.Sprintf("%s:%s", arg.Prefix, arg.Type))
@@ -175,13 +183,13 @@ func (f FuncType) String() string {
 	if len(f.Return) == 0 {
 		return f.Type + "[" + strings.Join(a, " ") + "]"
 	}
-	return f.Type + "[" + strings.Join(a, " ") + "] " + strings.Join(f.Return, " | ")
+	return f.Type + "[" + strings.Join(a, " ") + "] " // + strings.Join(f.Return, " | ")
 }
 
 func (f FuncType) Prototype(includeTypes bool) string {
 	var a []string
 	for _, arg := range f.Args {
-		if arg.Type == "" {
+		if len(arg.Type) == 0 {
 			a = append(a, arg.Prefix)
 		} else {
 			if includeTypes {
@@ -198,7 +206,7 @@ func (f FuncType) Prototype(includeTypes bool) string {
 func (f FuncType) GoName(includeType bool) string {
 	var a []string
 	for _, arg := range f.Args {
-		if arg.Type == "" {
+		if len(arg.Type) == 0 {
 			a = append(a, arg.Prefix)
 		} else {
 			a = append(a, fmt.Sprintf("%s_%s", arg.Prefix, arg.Type))
@@ -211,29 +219,13 @@ func (f FuncType) GoName(includeType bool) string {
 	return strings.Join(a, "__")
 }
 
-type Func struct {
-	FuncType FuncType
+type FuncStmt struct {
+	FuncType *FuncType
 	Stmts    []Stmt
-	VarTypes map[string]string
+	VarTypes map[string]Type
 }
 
 type yySymType struct {
-	// NUMBER STRING IDENTIFIER
-	String string
-	// BOOLEAN
-	Bool bool
-
-	Expr         Expr
-	Stmt         Stmt
-	Func         *Func
-	Stmts        []Stmt
-	Elses        []Else
-	FuncArgs     []FuncArg
-	CallExprArgs []*CallExprArg
-	Type         Type
-	FuncTypes    []FuncType
-	Vars         []VarStmt
-
 	r   any
 	yys int
 }
@@ -289,7 +281,15 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 	case '*':
 		return TIMES
 	case '/':
-		return DIVIDE
+		if l.pos < len(l.s) && l.s[l.pos] == '/' {
+			l.pos++
+			for l.s[l.pos] != '\n' {
+				l.pos++
+			}
+			l.pos++
+		} else {
+			return DIVIDE
+		}
 	case ',':
 		return COMMA
 	case '|':
@@ -327,7 +327,7 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 		for ; l.pos <= len(l.s)-1 && isNumberChar(l.s[l.pos]); l.pos++ {
 			s += string(l.s[l.pos])
 		}
-		lval.String = s
+		lval.r = s
 		return NUMBER
 	case '"':
 		{
@@ -336,7 +336,7 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 				s += string(l.s[l.pos])
 			}
 			l.pos++
-			lval.String = s
+			lval.r = s
 			return STRING
 		}
 	case '@':
@@ -346,7 +346,7 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 				s += string(l.s[l.pos])
 			}
 			l.pos++
-			lval.String = s
+			lval.r = s
 			return TAG
 		}
 	}
@@ -358,13 +358,6 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 	l.pos--
 
 	switch word {
-	case "true":
-		lval.Bool = true
-		return BOOLEAN
-	case "false":
-		lval.Bool = false
-		return BOOLEAN
-
 	case "and":
 		return AND
 	case "break":
@@ -375,6 +368,8 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 		return CONTINUE
 	case "else":
 		return ELSE
+	case "false":
+		return FALSE
 	case "for":
 		return FOR
 	case "func":
@@ -401,21 +396,16 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 		return OR
 	case "return":
 		return RETURN
+	case "true":
+		return TRUE
 	case "type":
 		return TYPE
 	}
 
-	lval.String = word
+	lval.r = word
 	return IDENTIFIER
 }
 
 func (l *lexer) Error(s string) {
 	panic(fmt.Sprintf("%s at ...%s", s, l.s[l.pos:]))
-}
-
-func lexAppend[T any](a, b any) []T {
-	if a == nil {
-		return []T{b.(T)}
-	}
-	return append(a.([]T), b.(T))
 }
