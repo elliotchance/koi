@@ -7,10 +7,7 @@ package main
 %token IMPORT IN IS FOR FUNC MUT NEW NOT OR RETURN TYPE TRUE;
 
 // operators
-%token OPEN_PAREN CLOSE_PAREN OPEN_CURLY CLOSE_CURLY OPEN_SQUARE CLOSE_SQUARE;
-%token EQUAL NOT_EQUAL LESS LESS_EQUAL GREATER GREATER_EQUAL;
-%token PLUS MINUS TIMES DIVIDE MODULO;
-%token ASSIGN COLON RANGE COMMA PIPE;
+%token EQUAL NOT_EQUAL LESS_EQUAL GREATER_EQUAL RANGE;
 
 // dynamic
 %token IDENTIFIER NUMBER STRING TAG;
@@ -30,14 +27,14 @@ program:
   | program type_stmt { file.Types = append(file.Types, $2.r.(TypeStmt)) }
 
 type_stmt: // *TypeStmt
-    TYPE IDENTIFIER OPEN_CURLY type_stmt_fields CLOSE_CURLY {
+    TYPE IDENTIFIER '{' type_stmt_fields '}' {
       $$.r = &TypeStmt{Name: $2.r.(string), Fields: $4.r.([]*FuncType)}
     }
-  | TYPE IDENTIFIER OPEN_CURLY CLOSE_CURLY {
+  | TYPE IDENTIFIER '{' '}' {
       $$.r = &TypeStmt{Name: $2.r.(string)}
     }
-  | TYPE IDENTIFIER OPEN_SQUARE IDENTIFIER CLOSE_SQUARE ASSIGN type { /* TODO */ }
-  | TYPE IDENTIFIER ASSIGN type { /* TODO */ }
+  | TYPE IDENTIFIER '[' IDENTIFIER ']' '=' type { /* TODO */ }
+  | TYPE IDENTIFIER '=' type { /* TODO */ }
 
 type_stmt_fields: // []*FuncType
     func_type { $$.r = []*FuncType{$1.r.(*FuncType)} }
@@ -62,10 +59,10 @@ func_args_multi: // []*FuncArg
     }
 
 func_args_term: // *FuncArg
-    IDENTIFIER COLON type {
+    IDENTIFIER ':' type {
       $$.r = &FuncArg{Prefix: $1.r.(string), Name: $1.r.(string), Type: $3.r.(Type)}
     }
-  | IDENTIFIER IDENTIFIER COLON type {
+  | IDENTIFIER IDENTIFIER ':' type {
       $$.r = &FuncArg{Prefix: $1.r.(string), Name: $2.r.(string), Type: $4.r.(Type)}
     }
 
@@ -83,7 +80,7 @@ stmts: // []Stmt
   // TODO add match
 
 match_expr:
-    MATCH expr OPEN_CURLY match_cases CLOSE_CURLY
+    MATCH expr '{' match_cases '}'
 
 match_cases:
     match_case
@@ -94,21 +91,21 @@ match_case:
   | TAG IDENTIFIER block
 
 block:
-    OPEN_CURLY stmts CLOSE_CURLY { $$.r = $2.r.([]Stmt) }
+    '{' stmts '}' { $$.r = $2.r.([]Stmt) }
 
 call_expr: // *CallExpr
-    OPEN_PAREN IDENTIFIER CLOSE_PAREN {
+    '(' IDENTIFIER ')' {
       $$.r = &CallExpr{Args: []*CallExprArg{{Name: $2.r.(string)}}}
     }
-  | OPEN_PAREN call_args CLOSE_PAREN {
+  | '(' call_args ')' {
       $$.r = &CallExpr{Args: $2.r.([]*CallExprArg)}
     }
 
 call_args: // []*CallExprArg
-    IDENTIFIER COLON expr {
+    IDENTIFIER ':' expr {
       $$.r = []*CallExprArg{{Name: $1.r.(string), Expr: $3.r}}
     }
-  | call_args IDENTIFIER COLON expr {
+  | call_args IDENTIFIER ':' expr {
       $$.r = append($1.r.([]*CallExprArg),
         &CallExprArg{Name: $2.r.(string), Expr: $4.r})
     }
@@ -118,7 +115,7 @@ var_stmt: // *VarStmt
   | MUT assign_stmt { $$.r = &VarStmt{Mut: true, AssignStmt: $2.r.(*AssignStmt)} }
 
 assign_stmt: // *AssignStmt
-    IDENTIFIER ASSIGN expr {
+    IDENTIFIER '=' expr {
       $$.r = AssignStmt{Name: $1.r.(string), Expr: $3.r}
     }
 
@@ -149,12 +146,12 @@ if_stmt: // *IfStmt
 
 key_value_exprs: // []*KeyValueExpr
     key_value_expr { $$.r = []*KeyValueExpr{$1.r.(*KeyValueExpr)} }
-  | key_value_exprs COMMA key_value_expr {
+  | key_value_exprs ',' key_value_expr {
       $$.r = append($1.r.([]*KeyValueExpr), $3.r.(*KeyValueExpr))
     }
 
 key_value_expr: // *KeyValueExpr
-    IDENTIFIER COLON expr { $$.r = &KeyValueExpr{$1.r.(string), $3.r} }
+    IDENTIFIER ':' expr { $$.r = &KeyValueExpr{$1.r.(string), $3.r} }
 
 // Expressions
 
@@ -166,7 +163,7 @@ expr: // any
 
 single_expr:
     value { $$.r = $1.r }
-  // | OPEN_PAREN expr CLOSE_PAREN { $$.r = $2.Expr }
+  // | '(' expr ')' { $$.r = $2.Expr }
   | single_expr call_expr {
       call := $2.r.(*CallExpr)
       call.On = $1.r
@@ -191,7 +188,7 @@ binary_expr:
 
 expr_list:
     expr
-  | expr_list COMMA expr
+  | expr_list ',' expr
 
 // Values
 
@@ -211,41 +208,41 @@ boolean_value:
 // new Person{name: "Bob"}
 // new thing{}
 object_value:
-    NEW IDENTIFIER OPEN_CURLY key_value_exprs CLOSE_CURLY {
+    NEW IDENTIFIER '{' key_value_exprs '}' {
       $$.r = NewExpr{$2.r.(string), $4.r.([]KeyValueExpr)}
     }
-  | NEW IDENTIFIER OPEN_CURLY CLOSE_CURLY
+  | NEW IDENTIFIER '{' '}'
 
 // [1, 2, 3]
 // [1, 2,]
 // new []int
 array_value:
-    OPEN_SQUARE expr_list optional_comma CLOSE_SQUARE
+    '[' expr_list optional_comma ']'
   | NEW array_type
 
 // {a: "foo", b: "bar"}
 // {1: 5, 7: 8,}
 // new map[string]string
 map_value:
-    OPEN_CURLY key_value_exprs optional_comma CLOSE_CURLY
+    '{' key_value_exprs optional_comma '}'
   | NEW map_type
 
 optional_comma:
-  | COMMA
+  | ','
 
 // Types
 
 type: // Type
     single_type { $$.r = Type{$1.r.(*SingleType)} }
-  | OPEN_PAREN sum_type CLOSE_PAREN { $$.r = $2.r.([]*SingleType) }
+  | '(' sum_type ')' { $$.r = $2.r.([]*SingleType) }
 
 array_type: // *ArrayType
-    OPEN_SQUARE CLOSE_SQUARE single_type {
+    '[' ']' single_type {
       $$.r = &ArrayType{Element: $3.r.(*SingleType)}
     }
 
 map_type: // *MapType
-    MAP OPEN_SQUARE IDENTIFIER CLOSE_SQUARE single_type {
+    MAP '[' IDENTIFIER ']' single_type {
       $$.r = &MapType{
         Key: &SingleType{Type: $3.r.(string)},
         Value: $5.r.(*SingleType),
@@ -260,15 +257,15 @@ single_type: // *SingleType
 
 sum_type: // []*SingleType
     single_type { $$.r = []*SingleType{$1.r.(*SingleType)} }
-  | sum_type PIPE single_type {
+  | sum_type '|' single_type {
       $$.r = append($1.r.([]*SingleType), $3.r.(*SingleType))
     }
 
 func_type: // *FuncType
-    FUNC OPEN_PAREN func_args CLOSE_PAREN type {
+    FUNC '(' func_args ')' type {
       $$.r = &FuncType{Args: $3.r.([]*FuncArg), Return: $5.r.(Type)}
     }
-  | FUNC IDENTIFIER OPEN_PAREN func_args CLOSE_PAREN type {
+  | FUNC IDENTIFIER '(' func_args ')' type {
       $$.r = &FuncType{Type: $2.r.(string), Args: $2.r.([]*FuncArg), Return: $4.r.(Type)}
     }
 

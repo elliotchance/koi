@@ -258,28 +258,9 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 	l.pos++
 	lval.yys = l.pos
 	switch l.s[l.pos-1] {
-	case ':':
-		return COLON
-	case '%':
-		return MODULO
-	case '[':
-		return OPEN_SQUARE
-	case ']':
-		return CLOSE_SQUARE
-	case '(':
-		return OPEN_PAREN
-	case ')':
-		return CLOSE_PAREN
-	case '{':
-		return OPEN_CURLY
-	case '}':
-		return CLOSE_CURLY
-	case '+':
-		return PLUS
-	case '-':
-		return MINUS
-	case '*':
-		return TIMES
+	case '+', '-', '*', ':', '%', ',', '|',
+		'(', ')', '[', ']', '{', '}':
+		return int(l.s[l.pos-1])
 	case '/':
 		if l.pos < len(l.s) && l.s[l.pos] == '/' {
 			l.pos++
@@ -290,16 +271,12 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 		} else {
 			return DIVIDE
 		}
-	case ',':
-		return COMMA
-	case '|':
-		return PIPE
 	case '=':
 		if l.pos < len(l.s) && l.s[l.pos] == '=' {
 			l.pos++
 			return EQUAL
 		}
-		return ASSIGN
+		return '='
 	case '!':
 		if l.pos < len(l.s) && l.s[l.pos] == '=' {
 			l.pos++
@@ -310,13 +287,13 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 			l.pos++
 			return LESS_EQUAL
 		}
-		return LESS
+		return '<'
 	case '>':
 		if l.pos < len(l.s) && l.s[l.pos] == '=' {
 			l.pos++
 			return GREATER_EQUAL
 		}
-		return GREATER
+		return '>'
 	case '.':
 		if l.pos < len(l.s) && l.s[l.pos] == '.' {
 			l.pos++
