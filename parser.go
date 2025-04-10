@@ -269,7 +269,7 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 			}
 			l.pos++
 		} else {
-			return DIVIDE
+			return '/'
 		}
 	case '=':
 		if l.pos < len(l.s) && l.s[l.pos] == '=' {

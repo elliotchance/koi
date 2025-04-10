@@ -14,9 +14,10 @@ package main
 
 %start program;
 
-%left EQUAL NOT_EQUAL LESS LESS_EQUAL GREATER GREATER_EQUAL
+%left EQUAL NOT_EQUAL '<' LESS_EQUAL '>' GREATER_EQUAL
 %left AND OR NOT
-%left PLUS MINUS TIMES DIVIDE MODULO
+%left '+' '-'
+%left '*' '/' '%'
 
 %%
 
@@ -159,7 +160,7 @@ expr: // any
     single_expr { $$.r = $1.r }
   | binary_expr { $$.r = $1.r }
   | NOT expr { $$.r = UnaryExpr{Expr: $2.r, Op: "!"} }
-  | MINUS expr { $$.r = UnaryExpr{Expr: $2.r, Op: "-"} }
+  | '-' expr { $$.r = UnaryExpr{Expr: $2.r, Op: "-"} }
 
 single_expr:
     value { $$.r = $1.r }
@@ -172,18 +173,18 @@ single_expr:
   | match_expr { /* TODO */ }
 
 binary_expr:
-    expr PLUS expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "+"} }
-  | expr MINUS expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "-"} }
-  | expr TIMES expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "*"} }
-  | expr DIVIDE expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "/"} }
-  | expr MODULO expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "%"} }
+    expr '+' expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "+"} }
+  | expr '-' expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "-"} }
+  | expr '*' expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "*"} }
+  | expr '/' expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "/"} }
+  | expr '%' expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "%"} }
   | expr AND expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "&&"} }
   | expr OR expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "||"} }
   | expr EQUAL expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "=="} }
   | expr NOT_EQUAL expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "!="} }
-  | expr LESS expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "<"} }
+  | expr '<' expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "<"} }
   | expr LESS_EQUAL expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "<="} }
-  | expr GREATER expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: ">"} }
+  | expr '>' expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: ">"} }
   | expr GREATER_EQUAL expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: ">="} }
 
 expr_list:
