@@ -9,10 +9,9 @@ var yySym yySymType
 
 type File struct {
 	Imports []string
-	Funcs   []Func
+	Funcs   []*Func
 	Vars    []VarStmt
 	Types   []TypeStmt
-	Code    []string
 }
 
 func (f *File) GetType(name string) TypeStmt {
@@ -25,6 +24,19 @@ func (f *File) GetType(name string) TypeStmt {
 	return TypeStmt{}
 }
 
+func (f *File) GetFunc(name string) *Func {
+	for _, f := range f.Funcs {
+		parts := strings.Split(f.FuncType.String(), "]")
+		if parts[0]+"]" == name {
+			return f
+		}
+	}
+
+	panic(name)
+
+	return nil
+}
+
 var file File
 
 type CallExprArg struct {
@@ -33,22 +45,22 @@ type CallExprArg struct {
 	Type string
 }
 
-type CodeStmt struct {
-	Code string
-}
-
 type CallExpr struct {
 	On   Expr
-	Args []CallExprArg
+	Args []*CallExprArg
 }
 
-func (c CallExpr) GoName() string {
+func (c *CallExpr) GoName(any bool) string {
 	var a []string
 	for _, arg := range c.Args {
 		if arg.Type == "" {
 			a = append(a, arg.Name)
 		} else {
-			a = append(a, fmt.Sprintf("%s_%s", arg.Name, arg.Type))
+			if any {
+				a = append(a, fmt.Sprintf("%s_any", arg.Name))
+			} else {
+				a = append(a, fmt.Sprintf("%s_%s", arg.Name, arg.Type))
+			}
 		}
 	}
 
@@ -151,6 +163,21 @@ type FuncType struct {
 	Return Type
 }
 
+func (f FuncType) String() string {
+	var a []string
+	for _, arg := range f.Args {
+		if arg.Type == "" {
+			a = append(a, arg.Prefix)
+		} else {
+			a = append(a, fmt.Sprintf("%s:%s", arg.Prefix, arg.Type))
+		}
+	}
+	if len(f.Return) == 0 {
+		return f.Type + "[" + strings.Join(a, " ") + "]"
+	}
+	return f.Type + "[" + strings.Join(a, " ") + "] " + strings.Join(f.Return, " | ")
+}
+
 func (f FuncType) Prototype(includeTypes bool) string {
 	var a []string
 	for _, arg := range f.Args {
@@ -187,6 +214,7 @@ func (f FuncType) GoName(includeType bool) string {
 type Func struct {
 	FuncType FuncType
 	Stmts    []Stmt
+	VarTypes map[string]string
 }
 
 type yySymType struct {
@@ -197,11 +225,11 @@ type yySymType struct {
 
 	Expr         Expr
 	Stmt         Stmt
-	Func         Func
+	Func         *Func
 	Stmts        []Stmt
 	Elses        []Else
 	FuncArgs     []FuncArg
-	CallExprArgs []CallExprArg
+	CallExprArgs []*CallExprArg
 	Type         Type
 	FuncTypes    []FuncType
 	Vars         []VarStmt
@@ -251,16 +279,6 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 	case ')':
 		return CLOSE_PAREN
 	case '{':
-		// if l.pos < len(l.s) && l.s[l.pos] == '%' {
-		// 	s := ""
-		// 	l.pos++
-		// 	for ; l.pos <= len(l.s)-1 && l.s[l.pos] != '%' && l.s[l.pos+1] != '}'; l.pos++ {
-		// 		s += string(l.s[l.pos])
-		// 	}
-		// 	l.pos += 2
-		// 	lval.String = s
-		// 	return CODE
-		// }
 		return OPEN_CURLY
 	case '}':
 		return CLOSE_CURLY
@@ -274,6 +292,8 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 		return DIVIDE
 	case ',':
 		return COMMA
+	case '|':
+		return PIPE
 	case '=':
 		if l.pos < len(l.s) && l.s[l.pos] == '=' {
 			l.pos++
@@ -319,6 +339,16 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 			lval.String = s
 			return STRING
 		}
+	case '@':
+		{
+			s := ""
+			for ; l.pos <= len(l.s) && isWordChar(l.s[l.pos]); l.pos++ {
+				s += string(l.s[l.pos])
+			}
+			l.pos++
+			lval.String = s
+			return TAG
+		}
 	}
 
 	word := ""
@@ -359,6 +389,10 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 		return IS
 	case "mut":
 		return MUT
+	case "match":
+		return MATCH
+	case "map":
+		return MAP
 	case "new":
 		return NEW
 	case "not":

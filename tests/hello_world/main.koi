@@ -1,5 +1,5 @@
 import io
 
 func static[main] {
-  io[printLine:"Hello, World!"]
+  io[PrintLine:"Hello, World!"]
 }

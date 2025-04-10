@@ -12,7 +12,7 @@ type rect {
 }
 
 type circle {
-  [radius] float64
+  func [radius] float64
 }
 
 func rect[area] float64 {
@@ -20,7 +20,7 @@ func rect[area] float64 {
 }
 
 func rect[perim] float64 {
-  return (2*rect[width]) + (2*rect[height])
+  return (2.0*rect[width]) + (2.0*rect[height])
 }
 
 func circle[area] float64 {
@@ -28,19 +28,19 @@ func circle[area] float64 {
 }
 
 func circle[perim] float64 {
-  return 2 * 3.14 * circle[radius]
+  return 2.0 * 3.14 * circle[radius]
 }
 
 func static[measure g:geometry] {
-  io[printLine: g]
-  io[printLine: g[area]]
-  io[printLine: g[perim]]
+  io[PrintLine: g]
+  io[PrintLine: g[area]]
+  io[PrintLine: g[perim]]
 }
 
 func static[detectCircle g:geometry] {
   if g is circle {
-    io[printLine: "circle with radius"]
-    io[printLine: g[radius]]
+    io[PrintLine: "circle with radius"]
+    io[PrintLine: g[radius]]
   }
 }
 

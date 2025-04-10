@@ -1,0 +1,12 @@
+import io
+
+func static[main] {
+  io[PrintLine: "foo" + "bar"]
+
+  io[PrintLine: 1+1]
+  io[PrintLine: 7.0/3.0]
+
+  io[PrintLine: true and false]
+  io[PrintLine: true or false]
+  io[PrintLine: not true]
+}

@@ -1,0 +1,4 @@
+#!/bin/bash
+
+go run . tests/$1/main.koi && go run out/main.go > /tmp/out.txt
+diff tests/$1/out.txt /tmp/out.txt

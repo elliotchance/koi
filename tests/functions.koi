@@ -1,5 +1,8 @@
 import io
 
+type i8 as number{min: -128, max: 128}
+type p8 as number{min: 1, max: 128}
+
 func (plus a:int b:int) int {
   return a + b
 }

@@ -1,0 +1,6 @@
+foobar
+2
+2.3333333333333335
+false
+true
+false

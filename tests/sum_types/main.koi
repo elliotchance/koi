@@ -1,0 +1,26 @@
+import io
+
+type NumberOrString = number | string
+
+type MultiValues = (number, bool) | None
+
+type NamedTypes = @high (number, number) | @low (number, number) | number
+
+type Funcs = func [] void | func[fn] number | func [add:and:] void
+
+type Generic[T] = func [] T | func [do:T] none
+
+func static[main] {
+  io[PrintLine:"Nice"]
+}
+
+func static[factoryFor n:number] func[fn:number] number | func[] {
+  if n == 0 {
+    return func static[] {
+    }
+  }
+
+  return func[fn:number] number {
+    return fn
+  }
+}
