@@ -18,10 +18,6 @@ func (v V) C(method string) V {
 	return v.F[method](v)
 }
 
-func Static_[T any](x T) V {
-	return V{fmt.Sprintf("%T", x), x, nil}
-}
-
-func Static__[T any](x T) M {
-	return func(...V) V { return Static_(x) }
-}
+// func Static__[T any](x T) M {
+// 	return func(...V) V { return Static_(x) }
+// }

@@ -6,6 +6,6 @@ import (
 	"github.com/elliotchance/koi/lib/koi"
 )
 
-func Sin_int(args ...koi.V) koi.V {
-	return koi.Static_(math.Sin(float64(args[0].V.(int))))
+func Koi_Sin(args ...koi.V) koi.V {
+	return koi.V{V: koi.Number{V: math.Sin(float64(args[0].V.(int)))}}
 }

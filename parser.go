@@ -2,40 +2,41 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 )
 
 var yySym yySymType
+var yyFile *File
+
+func Parse(filePath string) (*File, error) {
+	dat, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	yyFile = &File{}
+	yyParse(&lexer{s: string(dat)})
+
+	return yyFile, nil
+}
 
 type File struct {
 	Imports []string
 	Funcs   []*FuncStmt
-	Vars    []VarStmt
-	Types   []TypeStmt
+	Vars    []*VarStmt
+	Types   []*TypeStmt
 }
 
-func (f *File) GetType(name string) TypeStmt {
+func (f *File) GetType(name string) *TypeStmt {
 	for _, t := range f.Types {
 		if t.Name == name {
 			return t
 		}
 	}
 
-	return TypeStmt{}
+	return nil
 }
-
-func (f *File) GetFunc(name string) *FuncStmt {
-	for _, f := range f.Funcs {
-		parts := strings.Split(f.FuncType.String(), "]")
-		if parts[0]+"]" == name {
-			return f
-		}
-	}
-
-	panic(name)
-}
-
-var file File
 
 type CallExprArg struct {
 	Name string
@@ -48,21 +49,28 @@ type CallExpr struct {
 	Args []*CallExprArg
 }
 
-func (c *CallExpr) GoName(any bool) string {
-	var a []string
-	for _, arg := range c.Args {
-		if len(arg.Type) == 0 {
-			a = append(a, arg.Name)
-		} else {
-			if any {
-				a = append(a, fmt.Sprintf("%s_any", arg.Name))
-			} else {
-				a = append(a, fmt.Sprintf("%s_%s", arg.Name, arg.Type))
-			}
-		}
+func (c *CallExpr) Prototype(typ string) string {
+	if len(c.Args) == 1 && c.Args[0].Expr == nil {
+		return typ + "(" + c.Args[0].Name + ")"
 	}
 
-	return strings.Join(a, "__")
+	var args []string
+	for _, arg := range c.Args {
+		args = append(args, fmt.Sprintf("%s:", arg.Name))
+	}
+	return typ + "(" + strings.Join(args, "") + ")"
+}
+
+func (c *CallExpr) GoName() string {
+	if len(c.Args) == 1 && c.Args[0].Type == nil {
+		return "Koi_" + c.Args[0].Name
+	}
+
+	var args []string
+	for _, arg := range c.Args {
+		args = append(args, arg.Name+"_")
+	}
+	return "Koi_" + strings.Join(args, "")
 }
 
 type KeyValueExpr struct {
@@ -150,6 +158,19 @@ type FuncArg struct {
 
 type Type []*SingleType
 
+func (t Type) String() string {
+	if len(t) == 1 {
+		return t[0].String()
+	}
+
+	var s []string
+	for _, a := range t {
+		s = append(s, a.String())
+	}
+
+	return "(" + strings.Join(s, " | ") + ")"
+}
+
 type SingleType struct {
 	Type  string
 	Array *ArrayType
@@ -157,12 +178,33 @@ type SingleType struct {
 	Func  *FuncType
 }
 
+func (t *SingleType) String() string {
+	switch {
+	case t.Array != nil:
+		return t.Array.String()
+	case t.Map != nil:
+		return t.Map.String()
+	case t.Func != nil:
+		return t.Func.String()
+	}
+
+	return t.Type
+}
+
 type ArrayType struct {
 	Element *SingleType
 }
 
+func (t *ArrayType) String() string {
+	return "[]" + t.Element.String()
+}
+
 type MapType struct {
 	Key, Value *SingleType
+}
+
+func (t *MapType) String() string {
+	return "map[" + t.Key.String() + "]" + t.Value.String()
 }
 
 type FuncType struct {
@@ -171,55 +213,48 @@ type FuncType struct {
 	Return Type
 }
 
-func (f FuncType) String() string {
+func (f *FuncType) String() string {
+	if len(f.Args) == 1 && f.Args[0].Type == nil {
+		return f.Type + "(" + f.Args[0].Prefix + ")"
+	}
+
 	var a []string
 	for _, arg := range f.Args {
-		if len(arg.Type) == 0 {
-			a = append(a, arg.Prefix)
-		} else {
-			a = append(a, fmt.Sprintf("%s:%s", arg.Prefix, arg.Type))
-		}
+		a = append(a, fmt.Sprintf("%s:%s", arg.Prefix, arg.Type))
 	}
-	if len(f.Return) == 0 {
-		return f.Type + "[" + strings.Join(a, " ") + "]"
-	}
-	return f.Type + "[" + strings.Join(a, " ") + "] " // + strings.Join(f.Return, " | ")
+
+	return f.Type + "(" + strings.Join(a, "") + ") " + f.Return.String()
 }
 
-func (f FuncType) Prototype(includeTypes bool) string {
-	var a []string
-	for _, arg := range f.Args {
-		if len(arg.Type) == 0 {
-			a = append(a, arg.Prefix)
-		} else {
-			if includeTypes {
-				a = append(a, fmt.Sprintf("%s:%s", arg.Prefix, arg.Type))
-			} else {
-				a = append(a, fmt.Sprintf("%s:", arg.Prefix))
-			}
+func (f *FuncType) Prototype() string {
+	s := f.Type + "("
+	if len(f.Args) == 1 && f.Args[0].Type == nil {
+		s += f.Args[0].Prefix
+	} else {
+		var args []string
+		for _, arg := range f.Args {
+			args = append(args, fmt.Sprintf("%s:", arg.Prefix))
 		}
+		s += strings.Join(args, "")
 	}
 
-	return f.Type + "(" + strings.Join(a, " ") + ")"
+	return s + ")"
 }
 
-func (f FuncType) GoName(includeType bool) string {
-	var a []string
-	for _, arg := range f.Args {
-		if len(arg.Type) == 0 {
-			a = append(a, arg.Prefix)
-		} else {
-			a = append(a, fmt.Sprintf("%s_%s", arg.Prefix, arg.Type))
-		}
+func (f *FuncType) GoName() string {
+	if len(f.Args) == 1 && f.Args[0].Type == nil {
+		return "Koi_" + f.Args[0].Name
 	}
 
-	if includeType {
-		return f.Type + "__" + strings.Join(a, "__")
+	var args []string
+	for _, arg := range f.Args {
+		args = append(args, arg.Name+"_")
 	}
-	return strings.Join(a, "__")
+	return "Koi_" + strings.Join(args, "")
 }
 
 type FuncStmt struct {
+	Extern   bool
 	FuncType *FuncType
 	Stmts    []Stmt
 	VarTypes map[string]Type
@@ -345,6 +380,8 @@ func (l *lexer) Lex(lval *yySymType) (result int) {
 		return CONTINUE
 	case "else":
 		return ELSE
+	case "extern":
+		return EXTERN
 	case "false":
 		return FALSE
 	case "for":

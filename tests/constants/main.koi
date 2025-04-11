@@ -3,13 +3,13 @@ import math
 
 const s = "constant"
 
-func static[main] {
-  io[PrintLine: s]
+func (main) none {
+  io(PrintLine: s)
 
   const n = 500000000
 
-  const d = 3e20 / n[float64]
-  io[PrintLine: d]
+  const d = 3e20 / n
+  io(PrintLine: d)
 
-  io[PrintLine: math[Sin: n]]
+  io(PrintLine: math(Sin: n))
 }

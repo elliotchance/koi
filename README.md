@@ -102,3 +102,9 @@ func {
 Erorrs are just a return type. Auto snapshotting?
 
 ## Package Management
+
+## External Go
+
+```
+extern func (PrintLine:any) none
+```

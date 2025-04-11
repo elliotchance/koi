@@ -5,13 +5,13 @@ import (
 )
 
 func main() {
-	dat, err := os.ReadFile(os.Args[1])
+	file, err := Parse(os.Args[1])
 	if err != nil {
 		panic(err)
 	}
 
-	yyParse(&lexer{s: string(dat)})
-
-	c := Compiler{}
-	c.CompileFile(file)
+	c := &Compiler{}
+	c.compileImport("koi")
+	c.compileFile("", file)
+	c.Finish()
 }

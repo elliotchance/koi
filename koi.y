@@ -3,7 +3,7 @@ package main
 %}
 
 // keywords
-%token AND BREAK CONST CONTINUE ELSE IF FALSE MATCH MAP;
+%token AND BREAK CONST CONTINUE ELSE EXTERN IF FALSE MATCH MAP;
 %token IMPORT IN IS FOR FUNC MUT NEW NOT OR RETURN TYPE TRUE;
 
 // operators
@@ -22,10 +22,10 @@ package main
 %%
 
 program:
-  | program import_stmt { file.Imports = append(file.Imports, $2.r.(string)) }
-  | program func_stmt { file.Funcs = append(file.Funcs, $2.r.(*FuncStmt)) }
-  | program var_stmt { file.Vars = append(file.Vars, $2.r.(VarStmt)) }
-  | program type_stmt { file.Types = append(file.Types, $2.r.(TypeStmt)) }
+  | program import_stmt { yyFile.Imports = append(yyFile.Imports, $2.r.(string)) }
+  | program func_stmt { yyFile.Funcs = append(yyFile.Funcs, $2.r.(*FuncStmt)) }
+  | program var_stmt { yyFile.Vars = append(yyFile.Vars, $2.r.(*VarStmt)) }
+  | program type_stmt { yyFile.Types = append(yyFile.Types, $2.r.(*TypeStmt)) }
 
 type_stmt: // *TypeStmt
     TYPE IDENTIFIER '{' type_stmt_fields '}' {
@@ -48,6 +48,9 @@ func_stmt: // *FuncStmt
     func_type block {
       $$.r = &FuncStmt{ FuncType: $1.r.(*FuncType), Stmts: $2.r.([]Stmt) }
     }
+  | EXTERN func_type {
+      $$.r = &FuncStmt{ Extern: true, FuncType: $2.r.(*FuncType) }
+    }
 
 func_args: // []*FuncArg
     IDENTIFIER { $$.r = []*FuncArg{{Prefix: $1.r.(string)}} }
@@ -69,16 +72,15 @@ func_args_term: // *FuncArg
 
 stmts: // []Stmt
     { $$.r = []Stmt(nil) }
-  | stmts single_expr { $$.r = append($$.r.([]Stmt), ExprStmt{$2.r}) }
+  | stmts single_expr { $$.r = append($$.r.([]Stmt), &ExprStmt{$2.r}) }
   | stmts var_stmt { $$.r = append($$.r.([]Stmt), $2.r) }
   | stmts for_stmt { $$.r = append($$.r.([]Stmt), $2.r) }
   | stmts for_range_stmt { $$.r = append($$.r.([]Stmt), $2.r) }
   | stmts assign_stmt { $$.r = append($$.r.([]Stmt), $2.r) }
-  | stmts BREAK { $$.r = append($$.r.([]Stmt), BreakStmt{}) }
+  | stmts BREAK { $$.r = append($$.r.([]Stmt), &BreakStmt{}) }
   | stmts if_stmt { $$.r = append($$.r.([]Stmt), $2.r) }
-  | stmts CONTINUE { $$.r = append($$.r.([]Stmt), ContinueStmt{}) }
-  | stmts RETURN expr { $$.r = append($$.r.([]Stmt), ReturnStmt{Expr: $3.r}) }
-  // TODO add match
+  | stmts CONTINUE { $$.r = append($$.r.([]Stmt), &ContinueStmt{}) }
+  | stmts RETURN expr { $$.r = append($$.r.([]Stmt), &ReturnStmt{Expr: $3.r}) }
 
 match_expr:
     MATCH expr '{' match_cases '}'
@@ -117,7 +119,7 @@ var_stmt: // *VarStmt
 
 assign_stmt: // *AssignStmt
     IDENTIFIER '=' expr {
-      $$.r = AssignStmt{Name: $1.r.(string), Expr: $3.r}
+      $$.r = &AssignStmt{Name: $1.r.(string), Expr: $3.r}
     }
 
 for_stmt: // *ForStmt
@@ -137,7 +139,7 @@ if_stmt: // *IfStmt
     IF expr block { $$.r = &IfStmt{Expr: $2.r, Stmts: $3.r.([]Stmt)} }
   | IF IDENTIFIER IS IDENTIFIER block {
       $$.r = &IfStmt{
-        Expr: IsExpr{$2.r.(string), $4.r.(string)},
+        Expr: &IsExpr{$2.r.(string), $4.r.(string)},
         Stmts: $5.r.([]Stmt),
       }
     }
@@ -173,19 +175,19 @@ single_expr:
   | match_expr { /* TODO */ }
 
 binary_expr:
-    expr '+' expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "+"} }
-  | expr '-' expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "-"} }
-  | expr '*' expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "*"} }
-  | expr '/' expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "/"} }
-  | expr '%' expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "%"} }
-  | expr AND expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "&&"} }
-  | expr OR expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "||"} }
-  | expr EQUAL expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "=="} }
-  | expr NOT_EQUAL expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "!="} }
-  | expr '<' expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "<"} }
-  | expr LESS_EQUAL expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: "<="} }
-  | expr '>' expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: ">"} }
-  | expr GREATER_EQUAL expr { $$.r = BinaryExpr{Left: $1.r, Right: $3.r, Op: ">="} }
+    expr '+' expr { $$.r = &BinaryExpr{Left: $1.r, Right: $3.r, Op: "+"} }
+  | expr '-' expr { $$.r = &BinaryExpr{Left: $1.r, Right: $3.r, Op: "-"} }
+  | expr '*' expr { $$.r = &BinaryExpr{Left: $1.r, Right: $3.r, Op: "*"} }
+  | expr '/' expr { $$.r = &BinaryExpr{Left: $1.r, Right: $3.r, Op: "/"} }
+  | expr '%' expr { $$.r = &BinaryExpr{Left: $1.r, Right: $3.r, Op: "%"} }
+  | expr AND expr { $$.r = &BinaryExpr{Left: $1.r, Right: $3.r, Op: "&&"} }
+  | expr OR expr { $$.r = &BinaryExpr{Left: $1.r, Right: $3.r, Op: "||"} }
+  | expr EQUAL expr { $$.r = &BinaryExpr{Left: $1.r, Right: $3.r, Op: "=="} }
+  | expr NOT_EQUAL expr { $$.r = &BinaryExpr{Left: $1.r, Right: $3.r, Op: "!="} }
+  | expr '<' expr { $$.r = &BinaryExpr{Left: $1.r, Right: $3.r, Op: "<"} }
+  | expr LESS_EQUAL expr { $$.r = &BinaryExpr{Left: $1.r, Right: $3.r, Op: "<="} }
+  | expr '>' expr { $$.r = &BinaryExpr{Left: $1.r, Right: $3.r, Op: ">"} }
+  | expr GREATER_EQUAL expr { $$.r = &BinaryExpr{Left: $1.r, Right: $3.r, Op: ">="} }
 
 expr_list:
     expr
@@ -267,7 +269,7 @@ func_type: // *FuncType
       $$.r = &FuncType{Args: $3.r.([]*FuncArg), Return: $5.r.(Type)}
     }
   | FUNC IDENTIFIER '(' func_args ')' type {
-      $$.r = &FuncType{Type: $2.r.(string), Args: $2.r.([]*FuncArg), Return: $4.r.(Type)}
+      $$.r = &FuncType{Type: $2.r.(string), Args: $4.r.([]*FuncArg), Return: $6.r.(Type)}
     }
 
 %%
