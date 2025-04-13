@@ -266,8 +266,9 @@ type yySymType struct {
 }
 
 type lexer struct {
-	s   string
-	pos int
+	s        string
+	pos      int
+	brackets int
 }
 
 func isWordChar(c byte) bool {
@@ -283,18 +284,28 @@ func isNumberChar(c byte) bool {
 }
 
 func (l *lexer) Lex(lval *yySymType) (result int) {
-	for ; l.pos < len(l.s) && isWhitespace(l.s[l.pos]); l.pos++ {
-	}
-
 	if l.pos >= len(l.s) {
 		return 0
+	}
+
+	if l.s[l.pos] == '\n' && l.brackets == 0 {
+		l.pos++
+		return '\n'
+	}
+
+	for ; l.pos < len(l.s) && isWhitespace(l.s[l.pos]); l.pos++ {
 	}
 
 	l.pos++
 	lval.yys = l.pos
 	switch l.s[l.pos-1] {
-	case '+', '-', '*', ':', '%', ',', '|',
-		'(', ')', '[', ']', '{', '}':
+	case '(', '[':
+		l.brackets++
+		return int(l.s[l.pos-1])
+	case ')', ']':
+		l.brackets--
+		return int(l.s[l.pos-1])
+	case '+', '-', '*', ':', '%', ',', '|', '{', '}', ';':
 		return int(l.s[l.pos-1])
 	case '/':
 		if l.pos < len(l.s) && l.s[l.pos] == '/' {

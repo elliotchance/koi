@@ -26,6 +26,9 @@ program:
   | program func_stmt { yyFile.Funcs = append(yyFile.Funcs, $2.r.(*FuncStmt)) }
   | program var_stmt { yyFile.Vars = append(yyFile.Vars, $2.r.(*VarStmt)) }
   | program type_stmt { yyFile.Types = append(yyFile.Types, $2.r.(*TypeStmt)) }
+  | program eos
+
+eos: '\n' | ';'
 
 type_stmt: // *TypeStmt
     TYPE IDENTIFIER '{' type_stmt_fields '}' {
@@ -42,7 +45,7 @@ type_stmt_fields: // []*FuncType
   | type_stmt_fields func_type { $$.r = append($1.r.([]*FuncType), $2.r.(*FuncType)) }
 
 import_stmt: // string
-    IMPORT IDENTIFIER { $$.r = $2.r.(string) }
+    IMPORT IDENTIFIER eos { $$.r = $2.r.(string) }
 
 func_stmt: // *FuncStmt
     func_type block {
@@ -70,17 +73,21 @@ func_args_term: // *FuncArg
       $$.r = &FuncArg{Prefix: $1.r.(string), Name: $2.r.(string), Type: $4.r.(Type)}
     }
 
+stmt: // Stmt
+    single_expr { $$.r = &ExprStmt{$1.r} }
+  | var_stmt { $$.r = $1.r }
+  | for_stmt { $$.r = $1.r }
+  | for_range_stmt { $$.r = $1.r }
+  | assign_stmt { $$.r = $1.r }
+  | if_stmt { $$.r = $1.r }
+  | BREAK { $$.r = &BreakStmt{} }
+  | CONTINUE { $$.r = &ContinueStmt{} }
+  | RETURN expr { $$.r = &ReturnStmt{Expr: $2.r} }
+
 stmts: // []Stmt
     { $$.r = []Stmt(nil) }
-  | stmts single_expr { $$.r = append($$.r.([]Stmt), &ExprStmt{$2.r}) }
-  | stmts var_stmt { $$.r = append($$.r.([]Stmt), $2.r) }
-  | stmts for_stmt { $$.r = append($$.r.([]Stmt), $2.r) }
-  | stmts for_range_stmt { $$.r = append($$.r.([]Stmt), $2.r) }
-  | stmts assign_stmt { $$.r = append($$.r.([]Stmt), $2.r) }
-  | stmts BREAK { $$.r = append($$.r.([]Stmt), &BreakStmt{}) }
-  | stmts if_stmt { $$.r = append($$.r.([]Stmt), $2.r) }
-  | stmts CONTINUE { $$.r = append($$.r.([]Stmt), &ContinueStmt{}) }
-  | stmts RETURN expr { $$.r = append($$.r.([]Stmt), &ReturnStmt{Expr: $3.r}) }
+  | stmts eos { $$.r = $1.r }
+  | stmts stmt eos { $$.r = append($$.r.([]Stmt), $2.r) }
 
 match_expr:
     MATCH expr '{' match_cases '}'
@@ -199,10 +206,10 @@ value:
     IDENTIFIER { $$.r = IdentifierExpr($1.r.(string)) }
   | STRING { $$.r = StringExpr($1.r.(string)) }
   | NUMBER { $$.r = NumberExpr($1.r.(string)) }
-  | boolean_value
-  | array_value
-  | map_value
-  | object_value
+  | boolean_value { $$.r = $1.r }
+  | array_value { $$.r = $1.r }
+  | map_value { $$.r = $1.r }
+  | object_value { $$.r = $1.r }
 
 boolean_value:
     TRUE { $$.r = BoolExpr(true) }

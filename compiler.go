@@ -181,7 +181,7 @@ func (c *Compiler) compileExpr(expr Expr, fn *FuncStmt) (string, Type, error) {
 				re.ReplaceAllString(string(e), "%v"),
 				strings.Join(vals, ", ")), Type{{Type: "string"}}, nil
 		}
-		return fmt.Sprintf("koi.String{V: \"%s\"}", string(e)), Type{{Type: "string"}}, nil
+		return fmt.Sprintf("koi.NewString(\"%s\")", string(e)), Type{{Type: "string"}}, nil
 	case BoolExpr:
 		return fmt.Sprintf("koi.Bool(%v)", e), Type{{Type: "bool"}}, nil
 	case NumberExpr:
