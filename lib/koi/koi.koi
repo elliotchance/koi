@@ -1,0 +1,4 @@
+type Array[T] {
+  extern func (length) Int
+  extern func (append:T) Array[T]
+}

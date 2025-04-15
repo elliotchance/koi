@@ -7,5 +7,5 @@ import (
 )
 
 func Koi_Sin(args ...koi.V) koi.V {
-	return koi.V{V: koi.Number{V: math.Sin(float64(args[0].V.(int)))}}
+	return koi.NewFloat(math.Sin(float64(args[0].V.(int))))
 }

@@ -12,6 +12,7 @@ type Compiler struct {
 	Imports []string
 	Vars    []*VarStmt
 	Funcs   []*FuncStmt
+	Types   []*TypeStmt
 }
 
 const ImportPath = "lib"
@@ -20,12 +21,22 @@ func NewCompiler() *Compiler {
 	return &Compiler{}
 }
 
-func (c *Compiler) GetFunc(name string) *FuncStmt {
+func (c *Compiler) GetFunc(name string) *FuncType {
 	fmt.Printf("looking for %s in:\n", name)
 	for _, f := range c.Funcs {
 		fmt.Printf("  '%s'\n", f.FuncType.Prototype())
 		if f.FuncType.Prototype() == name {
-			return f
+			return f.FuncType
+		}
+	}
+	for _, t := range c.Types {
+		// fmt.Printf("  %s\n", t.Type)
+		for _, f := range t.Fields {
+			prototype := t.Type.String() + f.Prototype()
+			fmt.Printf("  '%s'\n", prototype)
+			if prototype == name {
+				return f
+			}
 		}
 	}
 
@@ -49,7 +60,7 @@ func (c *Compiler) Finish() error {
 	}
 
 	for _, funcStmt := range c.Funcs {
-		if funcStmt.Extern {
+		if funcStmt.FuncType.Extern {
 			continue
 		}
 
@@ -111,6 +122,8 @@ func (c *Compiler) compileFile(packageName string, file *File) error {
 			return err
 		}
 	}
+
+	c.Types = append(c.Types, file.Types...)
 
 	return nil
 }
@@ -186,11 +199,26 @@ func (c *Compiler) compileExpr(expr Expr, fn *FuncStmt) (string, Type, error) {
 		return fmt.Sprintf("koi.Bool(%v)", e), Type{{Type: "bool"}}, nil
 	case NumberExpr:
 		if strings.Contains(string(e), ".") || strings.Contains(string(e), "e") {
-			return fmt.Sprintf("koi.Number{V: %v}", e), Type{{Type: "float64"}}, nil
+			return fmt.Sprintf("koi.NewFloat(%v)", e), Type{{Type: "Float"}}, nil
 		}
-		return fmt.Sprintf("koi.Number{V: %v}", e), Type{{Type: "int"}}, nil
+		return fmt.Sprintf("koi.NewInt(%v)", e), Type{{Type: "int"}}, nil
 	case IdentifierExpr:
 		return string(e), fn.VarTypes[string(e)], nil
+	case *ArrayValue:
+		if len(e.Elements) == 0 {
+			return fmt.Sprintf("koi.NewArray(\"%s\")", e.Type.String()), e.Type, nil
+		}
+
+		var elements []string
+		for _, elem := range e.Elements {
+			code, _, err := c.compileExpr(elem, fn)
+			if err != nil {
+				return "", Type{}, err
+			}
+			elements = append(elements, code)
+		}
+		return fmt.Sprintf("koi.NewArray(\"%s\", \n%s,\n)", e.Type.String(), strings.Join(elements, ",\n")),
+			e.Type, nil
 	case *UnaryExpr:
 		code, typ, err := c.compileExpr(e.Expr, fn)
 		if err != nil {
@@ -212,10 +240,22 @@ func (c *Compiler) compileExpr(expr Expr, fn *FuncStmt) (string, Type, error) {
 		if len(rightType) == 0 {
 			panic("here")
 		}
-		return fmt.Sprintf("koi.Static_(%s.V.(%s) %s %s.V.(%s))",
+		return fmt.Sprintf("koi.NewInt(%s.V.(%s) %s %s.V.(%s))",
 			left, leftType[0].Type, e.Op, right, rightType[0].Type), leftType, nil
 	case *IsExpr:
 		return fmt.Sprintf("%s.N == \"%s\"", e.Name, e.Type), Type{{Type: "bool"}}, nil
+	case *IndexExpr:
+		on, onType, err := c.compileExpr(e.On, fn)
+		if err != nil {
+			return "", Type{}, err
+		}
+
+		index, _, err := c.compileExpr(e.Index, fn)
+		if err != nil {
+			return "", Type{}, err
+		}
+
+		return fmt.Sprintf("%s.V.([]koi.V)[%s.V.(int)]", on, index), onType.Element(), nil
 	case *NewExpr:
 		var fields []string
 		for _, f := range e.Fields {
@@ -223,16 +263,26 @@ func (c *Compiler) compileExpr(expr Expr, fn *FuncStmt) (string, Type, error) {
 				f.Key, f.Value))
 		}
 		for _, f := range c.Funcs {
-			if f.FuncType.Type == e.Type {
+			if f.FuncType.Type == e.Type.String() {
 				fields = append(fields, fmt.Sprintf("\t\t\"%s\": %s", f.FuncType.GoName(), f.FuncType.GoName()))
 			}
 		}
-		return fmt.Sprintf("V{\"%s\", nil, map[string]M{\n%s,\n\t}}\n", e.Type, strings.Join(fields, ",\n")),
+		if len(fields) == 0 {
+			return fmt.Sprintf("koi.V{\"%s\", []koi.V{}, nil}\n", e.Type), Type{{Type: "unknown15"}}, nil
+		}
+		return fmt.Sprintf("koi.V{\"%s\", []koi.V{}, map[string]M{\n%s,\n\t}}\n", e.Type, strings.Join(fields, ",\n")),
 			Type{{Type: "unknown5"}}, nil
 	case *CallExpr:
 		on, onType, err := c.compileExpr(e.On, fn)
 		if err != nil {
 			return "", Type{}, err
+		}
+
+		onTypeName := onType.String()
+		if onType.IsArray() {
+			// FIXME: This type
+			// return fmt.Sprintf("%s.C(\"%s\")", on, e.Selector()), Type{}, nil
+			onTypeName = "Array"
 		}
 
 		var args []string
@@ -247,9 +297,15 @@ func (c *Compiler) compileExpr(expr Expr, fn *FuncStmt) (string, Type, error) {
 			}
 		}
 
-		fmt.Println("#", e.Prototype(onType.String()))
-		return on + "." + e.GoName() + "(" + strings.Join(args, ", ") + ")",
-			c.GetFunc(e.Prototype(onType.String())).FuncType.Return, nil
+		for _, imp := range c.Imports {
+			if imp == on {
+				return on + "." + e.GoName("") + "(" + strings.Join(args, ", ") + ")",
+					c.GetFunc(e.Prototype(onTypeName)).Return, nil
+			}
+		}
+
+		return "koi." + e.GoName(onTypeName) + "(" + on + ", " + strings.Join(args, ", ") + ")",
+			c.GetFunc(e.Prototype(onTypeName)).Return, nil
 	}
 
 	return fmt.Sprintf("ERROR2: %T", expr), Type{{Type: "unknown6"}}, nil
@@ -276,6 +332,8 @@ func (c *Compiler) typeOfExpr(expr Expr, fn *FuncStmt) (Type, error) {
 	case *NewExpr:
 	case *CallExpr:
 		return Type{{Type: "float64"}}, nil
+	case *ArrayValue:
+		return Type([]*SingleType{{Type: "Array", Generics: []string{"int"}}}), nil
 	}
 
 	return Type{{Type: fmt.Sprintf("unknown7 %T", expr)}}, nil

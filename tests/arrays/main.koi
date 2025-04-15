@@ -1,8 +1,14 @@
-func (main) none {
-  a = [1, 2, 3]
-  b = new []int
+import io
 
-  a(append: 4)
-  io(PrintLine: a(len))
-  d = a[2] * 2
+func (main) none {
+  const a = [1, 2, 3]
+  io(printLine: a)
+  mut b = new Array[Float]{}
+  io(printLine: b)
+
+  a = a(append: 4)
+  io(printLine: a(length))
+  io(printLine: a[1])
+  const d = a[2] * 2
+  io(printLine: d)
 }

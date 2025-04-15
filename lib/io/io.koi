@@ -1,1 +1,1 @@
-extern func (PrintLine:any) none
+extern func (printLine:any) none

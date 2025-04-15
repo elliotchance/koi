@@ -30,12 +30,22 @@ type File struct {
 
 func (f *File) GetType(name string) *TypeStmt {
 	for _, t := range f.Types {
-		if t.Name == name {
+		if t.Type.String() == name {
 			return t
 		}
 	}
 
 	return nil
+}
+
+type IndexExpr struct {
+	On    Expr
+	Index Expr
+}
+
+type ArrayValue struct {
+	Type     Type
+	Elements []Expr
 }
 
 type CallExprArg struct {
@@ -45,8 +55,9 @@ type CallExprArg struct {
 }
 
 type CallExpr struct {
-	On   Expr
-	Args []*CallExprArg
+	HasArgs bool
+	On      Expr
+	Args    []*CallExprArg
 }
 
 func (c *CallExpr) Prototype(typ string) string {
@@ -61,16 +72,31 @@ func (c *CallExpr) Prototype(typ string) string {
 	return typ + "(" + strings.Join(args, "") + ")"
 }
 
-func (c *CallExpr) GoName() string {
-	if len(c.Args) == 1 && c.Args[0].Type == nil {
-		return "Koi_" + c.Args[0].Name
+func (c *CallExpr) Selector() string {
+	if !c.HasArgs {
+		return c.Args[0].Name
+	}
+
+	var args []string
+	for _, arg := range c.Args {
+		args = append(args, arg.Name+":")
+	}
+	return strings.Join(args, "")
+}
+
+func (c *CallExpr) GoName(typ string) string {
+	if typ != "" {
+		typ += "_"
+	}
+	if !c.HasArgs {
+		return "Koi_" + typ + c.Args[0].Name
 	}
 
 	var args []string
 	for _, arg := range c.Args {
 		args = append(args, arg.Name+"_")
 	}
-	return "Koi_" + strings.Join(args, "")
+	return "Koi_" + typ + strings.Join(args, "")
 }
 
 type KeyValueExpr struct {
@@ -136,7 +162,7 @@ type IsExpr struct {
 }
 
 type TypeStmt struct {
-	Name   string
+	Type   *SingleType
 	Fields []*FuncType
 }
 
@@ -146,7 +172,7 @@ type UnaryExpr struct {
 }
 
 type NewExpr struct {
-	Type   string
+	Type   *SingleType
 	Fields []KeyValueExpr
 }
 
@@ -171,11 +197,28 @@ func (t Type) String() string {
 	return "(" + strings.Join(s, " | ") + ")"
 }
 
+func (t Type) IsArray() bool {
+	if len(t) != 1 {
+		return false
+	}
+
+	return t[0].Type == "Array"
+}
+
+func (t Type) Element() Type {
+	if !t.IsArray() {
+		panic(fmt.Sprintf("cannot Element: %s", t))
+	}
+
+	return []*SingleType{{Type: t[0].Generics[0]}}
+}
+
 type SingleType struct {
-	Type  string
-	Array *ArrayType
-	Map   *MapType
-	Func  *FuncType
+	Type     string
+	Generics []string
+	Array    *ArrayType
+	Map      *MapType
+	Func     *FuncType
 }
 
 func (t *SingleType) String() string {
@@ -208,6 +251,7 @@ func (t *MapType) String() string {
 }
 
 type FuncType struct {
+	Extern bool
 	Type   string
 	Args   []*FuncArg
 	Return Type
@@ -254,7 +298,6 @@ func (f *FuncType) GoName() string {
 }
 
 type FuncStmt struct {
-	Extern   bool
 	FuncType *FuncType
 	Stmts    []Stmt
 	VarTypes map[string]Type
@@ -284,6 +327,9 @@ func isNumberChar(c byte) bool {
 }
 
 func (l *lexer) Lex(lval *yySymType) (result int) {
+	// defer func() {
+	// 	fmt.Println(result)
+	// }()
 	if l.pos >= len(l.s) {
 		return 0
 	}

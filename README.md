@@ -106,5 +106,5 @@ Erorrs are just a return type. Auto snapshotting?
 ## External Go
 
 ```
-extern func (PrintLine:any) none
+extern func (printLine:any) none
 ```

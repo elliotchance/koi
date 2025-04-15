@@ -31,18 +31,15 @@ program:
 eos: '\n' | ';'
 
 type_stmt: // *TypeStmt
-    TYPE IDENTIFIER '{' type_stmt_fields '}' {
-      $$.r = &TypeStmt{Name: $2.r.(string), Fields: $4.r.([]*FuncType)}
+    TYPE generic_type '{' type_stmt_fields '}' {
+      $$.r = &TypeStmt{Type: $2.r.(*SingleType), Fields: $4.r.([]*FuncType)}
     }
-  | TYPE IDENTIFIER '{' '}' {
-      $$.r = &TypeStmt{Name: $2.r.(string)}
-    }
-  | TYPE IDENTIFIER '[' IDENTIFIER ']' '=' type { /* TODO */ }
-  | TYPE IDENTIFIER '=' type { /* TODO */ }
+  | TYPE generic_type '=' type { /* TODO */ }
 
 type_stmt_fields: // []*FuncType
-    func_type { $$.r = []*FuncType{$1.r.(*FuncType)} }
-  | type_stmt_fields func_type { $$.r = append($1.r.([]*FuncType), $2.r.(*FuncType)) }
+    { $$.r = []*FuncType{} }
+  | type_stmt_fields eos { $$.r = $1.r }
+  | type_stmt_fields extern_func_type eos { $$.r = append($1.r.([]*FuncType), $2.r.(*FuncType)) }
 
 import_stmt: // string
     IMPORT IDENTIFIER eos { $$.r = $2.r.(string) }
@@ -52,7 +49,9 @@ func_stmt: // *FuncStmt
       $$.r = &FuncStmt{ FuncType: $1.r.(*FuncType), Stmts: $2.r.([]Stmt) }
     }
   | EXTERN func_type {
-      $$.r = &FuncStmt{ Extern: true, FuncType: $2.r.(*FuncType) }
+      funcType := $2.r.(*FuncType)
+      funcType.Extern = true
+      $$.r = &FuncStmt{ FuncType: funcType }
     }
 
 func_args: // []*FuncArg
@@ -108,7 +107,7 @@ call_expr: // *CallExpr
       $$.r = &CallExpr{Args: []*CallExprArg{{Name: $2.r.(string)}}}
     }
   | '(' call_args ')' {
-      $$.r = &CallExpr{Args: $2.r.([]*CallExprArg)}
+      $$.r = &CallExpr{HasArgs: true, Args: $2.r.([]*CallExprArg)}
     }
 
 call_args: // []*CallExprArg
@@ -171,6 +170,9 @@ expr: // any
   | NOT expr { $$.r = UnaryExpr{Expr: $2.r, Op: "!"} }
   | '-' expr { $$.r = UnaryExpr{Expr: $2.r, Op: "-"} }
 
+index_expr:
+  '[' expr ']' { $$.r = $2.r }
+
 single_expr:
     value { $$.r = $1.r }
   // | '(' expr ')' { $$.r = $2.Expr }
@@ -178,6 +180,12 @@ single_expr:
       call := $2.r.(*CallExpr)
       call.On = $1.r
       $$.r = call
+    }
+  | single_expr index_expr {
+      $$.r = &IndexExpr{On: $1.r, Index: $2.r}
+      // call := $2.r.(*CallExpr)
+      // call.On = $1.r
+      // $$.r = call
     }
   | match_expr { /* TODO */ }
 
@@ -196,9 +204,9 @@ binary_expr:
   | expr '>' expr { $$.r = &BinaryExpr{Left: $1.r, Right: $3.r, Op: ">"} }
   | expr GREATER_EQUAL expr { $$.r = &BinaryExpr{Left: $1.r, Right: $3.r, Op: ">="} }
 
-expr_list:
-    expr
-  | expr_list ',' expr
+expr_list: // []Expr
+    expr { $$.r = []Expr{$1.r} }
+  | expr_list ',' expr { $$.r = append($1.r.([]Expr), $3.r) }
 
 // Values
 
@@ -217,25 +225,27 @@ boolean_value:
 
 // new Person{name: "Bob"}
 // new thing{}
-object_value:
-    NEW IDENTIFIER '{' key_value_exprs '}' {
-      $$.r = NewExpr{$2.r.(string), $4.r.([]KeyValueExpr)}
+object_value: // *NewExpr
+    NEW generic_type '{' key_value_exprs '}' {
+      $$.r = &NewExpr{$2.r.(*SingleType), $4.r.([]KeyValueExpr)}
     }
-  | NEW IDENTIFIER '{' '}'
+  | NEW generic_type '{' '}' { $$.r = &NewExpr{Type: $2.r.(*SingleType)} }
 
 // [1, 2, 3]
 // [1, 2,]
 // new []int
-array_value:
-    '[' expr_list optional_comma ']'
-  | NEW array_type
+array_value: // *ArrayValue
+    '[' expr_list optional_comma ']' {
+      $$.r = &ArrayValue{Elements: $2.r.([]Expr)}
+    }
+  // | NEW array_type { $$.r = &ArrayValue{Type: Type{&SingleType{Array: $2.r.(*ArrayType)}}} }
 
 // {a: "foo", b: "bar"}
 // {1: 5, 7: 8,}
 // new map[string]string
 map_value:
     '{' key_value_exprs optional_comma '}'
-  | NEW map_type
+  // | NEW map_type
 
 optional_comma:
   | ','
@@ -246,29 +256,42 @@ type: // Type
     single_type { $$.r = Type{$1.r.(*SingleType)} }
   | '(' sum_type ')' { $$.r = $2.r.([]*SingleType) }
 
-array_type: // *ArrayType
-    '[' ']' single_type {
-      $$.r = &ArrayType{Element: $3.r.(*SingleType)}
-    }
+// array_type: // *ArrayType
+//     '[' ']' single_type {
+//       $$.r = &ArrayType{Element: $3.r.(*SingleType)}
+//     }
 
-map_type: // *MapType
-    MAP '[' IDENTIFIER ']' single_type {
-      $$.r = &MapType{
-        Key: &SingleType{Type: $3.r.(string)},
-        Value: $5.r.(*SingleType),
-      }
-    }
+// map_type: // *MapType
+//     MAP '[' IDENTIFIER ']' single_type {
+//       $$.r = &MapType{
+//         Key: &SingleType{Type: $3.r.(string)},
+//         Value: $5.r.(*SingleType),
+//       }
+//     }
 
 single_type: // *SingleType
-    IDENTIFIER { $$.r = &SingleType{Type: $1.r.(string)} }
-  | array_type { $$.r = &SingleType{Array: $1.r.(*ArrayType)} }
-  | map_type { $$.r = &SingleType{Map: $1.r.(*MapType)} }
+    generic_type { $$.r = $1.r }
+  // | array_type { $$.r = &SingleType{Array: $1.r.(*ArrayType)} }
+  // | map_type { $$.r = &SingleType{Map: $1.r.(*MapType)} }
   | func_type { $$.r = &SingleType{Func: $1.r.(*FuncType)} }
+
+generic_type: // *SingleType
+    IDENTIFIER { $$.r = &SingleType{Type: $1.r.(string)} }
+  | IDENTIFIER '[' IDENTIFIER ']' {
+      $$.r = &SingleType{Type: $1.r.(string), Generics: []string{$3.r.(string)}}
+    }
 
 sum_type: // []*SingleType
     single_type { $$.r = []*SingleType{$1.r.(*SingleType)} }
   | sum_type '|' single_type {
       $$.r = append($1.r.([]*SingleType), $3.r.(*SingleType))
+    }
+
+extern_func_type:
+    func_type { $$.r = $1.r }
+  | EXTERN func_type {
+      $2.r.(*FuncType).Extern = true
+      $$.r = $2.r
     }
 
 func_type: // *FuncType
