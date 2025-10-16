@@ -1,0 +1,11 @@
+import io
+
+func main() {
+    io.printLine("he" + "llo")
+
+    io.printLine("1+1 = {1+1}")
+    io.printLine("7.0/3.0 = {7.0/3.0}")
+    io.printLine(true and false)
+    io.printLine(true or false)
+    io.printLine(not true)
+}

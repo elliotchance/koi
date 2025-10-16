@@ -1,0 +1,27 @@
+type rect(width float64, height float64) {
+  func area() float64 {
+    return width * height
+  }
+
+  func perim() float64 {
+    return 2*width + 2*height
+  }
+}
+
+type circle(radius float64) {
+
+}
+
+type geometry(
+  area() float64,
+  perim() float64,
+) {}
+
+func measure(g geometry) {
+  io.printLine(g.area())
+}
+
+func main() {
+  r = rect(3, 4)
+  measure(r)
+}
